@@ -192,17 +192,43 @@ create table if not exists technician_skills (
   unique (technician_id, skill)
 );
 
+create table if not exists drivers (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  phone text,
+  license_number text,
+  status text not null default 'available',
+  created_at timestamptz not null default now()
+);
+
+create table if not exists vehicles (
+  id uuid primary key default gen_random_uuid(),
+  code text not null unique,
+  plate_number text not null,
+  vehicle_type text not null default 'van',
+  status text not null default 'available',
+  current_mileage integer not null default 0,
+  registration_expiry date,
+  insurance_expiry date,
+  notes text,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists service_jobs (
   id uuid primary key default gen_random_uuid(),
   client_id uuid references clients(id),
   property_id uuid references client_properties(id),
   category_id uuid references service_categories(id),
+  vehicle_id uuid references vehicles(id),
+  driver_id uuid references drivers(id),
   title text not null,
   priority text not null default 'normal',
   status text not null default 'pending',
   scheduled_at timestamptz,
   clock_in timestamptz,
   clock_out timestamptz,
+  opening_mileage integer not null default 0,
+  closing_mileage integer not null default 0,
   navigation_link text,
   checklist text,
   remarks text,
@@ -212,6 +238,33 @@ create table if not exists service_jobs (
   convert_to_amc_lead boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
+);
+
+create table if not exists vehicle_mileage_logs (
+  id uuid primary key default gen_random_uuid(),
+  vehicle_id uuid not null references vehicles(id) on delete cascade,
+  driver_id uuid references drivers(id),
+  job_id uuid references service_jobs(id),
+  log_date date not null default current_date,
+  opening_mileage integer not null default 0,
+  closing_mileage integer not null default 0,
+  notes text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists fuel_logs (
+  id uuid primary key default gen_random_uuid(),
+  vehicle_id uuid not null references vehicles(id) on delete cascade,
+  driver_id uuid references drivers(id),
+  job_id uuid references service_jobs(id),
+  fuel_date date not null default current_date,
+  odometer integer not null default 0,
+  litres numeric(12,2) not null default 0,
+  amount numeric(12,2) not null default 0,
+  station text,
+  receipt_url text,
+  notes text,
+  created_at timestamptz not null default now()
 );
 
 create table if not exists service_job_items (
@@ -417,6 +470,9 @@ create index if not exists idx_client_properties_client on client_properties(cli
 create index if not exists idx_amc_contracts_client on amc_contracts(client_id);
 create index if not exists idx_ppm_schedules_due on ppm_schedules(due_date, status);
 create index if not exists idx_service_jobs_status on service_jobs(status, priority);
+create index if not exists idx_service_jobs_vehicle on service_jobs(vehicle_id, status);
+create index if not exists idx_fuel_logs_vehicle_date on fuel_logs(vehicle_id, fuel_date);
+create index if not exists idx_mileage_logs_vehicle_date on vehicle_mileage_logs(vehicle_id, log_date);
 create index if not exists idx_tickets_status on tickets(status, priority);
 create index if not exists idx_invoices_status on invoices(status, due_date);
 

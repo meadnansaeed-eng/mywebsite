@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Banknote,
   Building2,
   CalendarClock,
   CheckCircle2,
+  ChevronDown,
   ClipboardList,
   ClipboardCheck,
   Clock3,
@@ -16,6 +17,8 @@ import {
   FileDown,
   FileText,
   FileClock,
+  Fuel,
+  Gauge,
   Home,
   MapPin,
   MessageSquareWarning,
@@ -28,6 +31,7 @@ import {
   Settings,
   ShieldCheck,
   Trash2,
+  Truck,
   UserRoundCheck,
   Users,
   Wallet,
@@ -37,6 +41,7 @@ import {
 } from "lucide-react";
 import {
   demoClients,
+  demoContracts,
   demoProperties,
   initialStore,
   makeId,
@@ -46,6 +51,8 @@ import {
   type ComplaintRecord,
   type CrmSettings,
   type ExpenseRecord,
+  type DriverRecord,
+  type FuelLogRecord,
   type InventoryRecord,
   type InvoiceRecord,
   type JobRecord,
@@ -54,6 +61,7 @@ import {
   type PropertyRecord,
   type QuotationRecord,
   type TechnicianRecord,
+  type VehicleRecord,
 } from "@/lib/amcStore";
 
 type ModuleKey =
@@ -65,6 +73,7 @@ type ModuleKey =
   | "jobs"
   | "renovation"
   | "technicians"
+  | "fleet"
   | "quotations"
   | "invoices"
   | "inventory"
@@ -80,6 +89,9 @@ type RecordCollectionKey =
   | "properties"
   | "contracts"
   | "technicians"
+  | "vehicles"
+  | "drivers"
+  | "fuelLogs"
   | "jobs"
   | "quotations"
   | "invoices"
@@ -113,6 +125,9 @@ type DashboardStats = {
   expenses: number;
   renewalRate: number;
   complaintResolutionDays: number;
+  occupiedVehicles: number;
+  availableVehicles: number;
+  fuelSpend: number;
 };
 
 type ClientType = ClientRecord["clientType"];
@@ -134,6 +149,7 @@ const modules: { key: ModuleKey; label: string; icon: LucideIcon }[] = [
   { key: "jobs", label: "Service Jobs", icon: Wrench },
   { key: "renovation", label: "Renovation Projects", icon: Building2 },
   { key: "technicians", label: "Technicians", icon: UserRoundCheck },
+  { key: "fleet", label: "Fleet", icon: Truck },
   { key: "quotations", label: "Quotations", icon: FileText },
   { key: "invoices", label: "Invoices & Payments", icon: Banknote },
   { key: "expenses", label: "Expenses", icon: CreditCard },
@@ -149,6 +165,10 @@ const panelIcons: Record<string, LucideIcon> = {
   "AMC Contracts": ShieldCheck,
   "Service Jobs": Wrench,
   Technicians: UserRoundCheck,
+  Fleet: Truck,
+  Vehicles: Truck,
+  Drivers: UserRoundCheck,
+  "Fuel Logs": Fuel,
   Quotations: FileText,
   "Invoices & Payments": Banknote,
   Expenses: CreditCard,
@@ -173,6 +193,8 @@ const reportIcons: Record<string, LucideIcon> = {
   "Paid Collected": Wallet,
   "Low Stock Items": Package,
   Expenses: CreditCard,
+  "Occupied Vehicles": Truck,
+  "Fuel Spend": Fuel,
   "Complaint Resolution": MessageSquareWarning,
   Contracts: ShieldCheck,
   Jobs: Wrench,
@@ -250,6 +272,11 @@ const jobBlank: JobRecord = {
   clientId: "",
   propertyId: "",
   technicianId: "",
+  teamTechnicianIds: "",
+  vehicleId: "",
+  driverId: "",
+  openingMileage: 0,
+  closingMileage: 0,
   title: "",
   priority: "Normal",
   status: "Pending",
@@ -264,6 +291,40 @@ const jobBlank: JobRecord = {
   beforePhotos: "",
   afterPhotos: "",
   customerSignature: "",
+};
+
+const vehicleBlank: VehicleRecord = {
+  id: "",
+  code: "",
+  plateNumber: "",
+  type: "Van",
+  status: "Available",
+  currentMileage: 0,
+  registrationExpiry: "",
+  insuranceExpiry: "",
+  notes: "",
+};
+
+const driverBlank: DriverRecord = {
+  id: "",
+  name: "",
+  phone: "",
+  licenseNumber: "",
+  status: "Available",
+};
+
+const fuelBlank: FuelLogRecord = {
+  id: "",
+  vehicleId: "",
+  driverId: "",
+  jobId: "",
+  date: "",
+  odometer: 0,
+  litres: 0,
+  amount: 0,
+  station: "",
+  receiptUrl: "",
+  notes: "",
 };
 
 const quoteBlank: QuotationRecord = {
@@ -614,20 +675,35 @@ function normalizeStore(saved: Partial<AmcStore>): AmcStore {
     ...savedProperties,
     ...demoProperties.filter((property) => !propertyIds.has(property.id)),
   ];
+  const savedContractIds = new Set(savedContracts.map((contract) => contract.id));
+  const mergedContracts = [
+    ...savedContracts,
+    ...demoContracts.filter((contract) => !savedContractIds.has(contract.id)),
+  ];
 
   return {
     ...initialStore,
     ...saved,
     clients: sortedClients,
     properties: mergedProperties,
-    contracts: savedContracts,
+    contracts: mergedContracts,
     technicians: saved.technicians || [],
-    jobs: saved.jobs || [],
+    vehicles: saved.vehicles || initialStore.vehicles,
+    drivers: saved.drivers || initialStore.drivers,
+    jobs: (saved.jobs || []).map((job) => ({
+      ...job,
+      teamTechnicianIds: job.teamTechnicianIds || job.technicianId || "",
+      vehicleId: job.vehicleId || "",
+      driverId: job.driverId || "",
+      openingMileage: job.openingMileage || 0,
+      closingMileage: job.closingMileage || 0,
+    })),
     quotations: saved.quotations || [],
     invoices: saved.invoices || [],
     inventory: saved.inventory || [],
     expenses: saved.expenses || [],
-  complaints: saved.complaints || [],
+    complaints: saved.complaints || [],
+    fuelLogs: saved.fuelLogs || initialStore.fuelLogs,
   communities,
   areas,
   locationAreas,
@@ -689,6 +765,9 @@ export default function AmcOperationsApp() {
   const [technicianForm, setTechnicianForm] =
     useState<TechnicianRecord>(technicianBlank);
   const [jobForm, setJobForm] = useState<JobRecord>(jobBlank);
+  const [vehicleForm, setVehicleForm] = useState<VehicleRecord>(vehicleBlank);
+  const [driverForm, setDriverForm] = useState<DriverRecord>(driverBlank);
+  const [fuelForm, setFuelForm] = useState<FuelLogRecord>(fuelBlank);
   const [quoteForm, setQuoteForm] = useState<QuotationRecord>(quoteBlank);
   const [invoiceForm, setInvoiceForm] = useState<InvoiceRecord>(invoiceBlank);
   const [inventoryForm, setInventoryForm] =
@@ -749,6 +828,16 @@ export default function AmcOperationsApp() {
   const technicianName = (id: string) =>
     store.technicians.find((technician) => technician.id === id)?.name ||
     "Unassigned";
+  const vehicleName = (id: string) =>
+    store.vehicles.find((vehicle) => vehicle.id === id)?.code || "Unassigned";
+  const driverName = (id: string) =>
+    store.drivers.find((driver) => driver.id === id)?.name || "Unassigned";
+  const technicianTeamName = (ids: string) =>
+    ids
+      .split(",")
+      .map((id) => technicianName(id.trim()))
+      .filter((name) => name !== "Unassigned")
+      .join(", ") || "Unassigned";
 
   const stats = useMemo(() => {
     const quoteValue = store.quotations.reduce(
@@ -850,6 +939,13 @@ export default function AmcOperationsApp() {
       expenses: expenseValue,
       renewalRate,
       complaintResolutionDays,
+      occupiedVehicles: store.vehicles.filter(
+        (vehicle) => vehicle.status === "Occupied"
+      ).length,
+      availableVehicles: store.vehicles.filter(
+        (vehicle) => vehicle.status === "Available"
+      ).length,
+      fuelSpend: store.fuelLogs.reduce((sum, log) => sum + log.amount, 0),
     };
   }, [store]);
 
@@ -1331,6 +1427,8 @@ export default function AmcOperationsApp() {
                 clientName={clientName}
                 propertyName={propertyName}
                 technicianName={technicianName}
+                vehicleName={vehicleName}
+                driverName={driverName}
               />
             )}
 
@@ -1569,12 +1667,17 @@ export default function AmcOperationsApp() {
                     <SelectInput label="Client" value={jobForm.clientId} onChange={(clientId) => setJobForm({ ...jobForm, clientId, propertyId: "" })} options={store.clients.map((client) => [client.id, client.name])} required />
                     <SelectInput label="Property" value={jobForm.propertyId} onChange={(propertyId) => setJobForm({ ...jobForm, propertyId })} options={propertyOptionsForClient(jobForm.clientId)} required />
                     <SelectInput label="Technician" value={jobForm.technicianId} onChange={(technicianId) => setJobForm({ ...jobForm, technicianId })} options={store.technicians.map((tech) => [tech.id, tech.name])} />
+                    <TextInput label="Team technician IDs" value={jobForm.teamTechnicianIds || ""} onChange={(teamTechnicianIds) => setJobForm({ ...jobForm, teamTechnicianIds })} />
+                    <SelectInput label="Driver" value={jobForm.driverId || ""} onChange={(driverId) => setJobForm({ ...jobForm, driverId })} options={store.drivers.map((driver) => [driver.id, driver.name])} />
+                    <SelectInput label="Vehicle" value={jobForm.vehicleId || ""} onChange={(vehicleId) => setJobForm({ ...jobForm, vehicleId })} options={store.vehicles.map((vehicle) => [vehicle.id, `${vehicle.code} - ${vehicle.plateNumber}`])} />
                     <SelectInput label="Priority" value={jobForm.priority} onChange={(priority) => setJobForm({ ...jobForm, priority: priority as JobRecord["priority"] })} options={["Low", "Normal", "High", "Emergency"].map((value) => [value, value])} />
                     <SelectInput label="Status" value={jobForm.status} onChange={(status) => setJobForm({ ...jobForm, status: status as JobRecord["status"] })} options={["Pending", "Assigned", "In Progress", "Waiting Material", "Completed", "Cancelled"].map((value) => [value, value])} />
                     <TextInput label="Scheduled date" type="date" value={jobForm.scheduledDate} onChange={(scheduledDate) => setJobForm({ ...jobForm, scheduledDate })} />
                     <TextInput label="Scheduled time" type="time" value={jobForm.scheduledTime} onChange={(scheduledTime) => setJobForm({ ...jobForm, scheduledTime })} />
                     <TextInput label="Clock in" type="time" value={jobForm.clockIn || ""} onChange={(clockIn) => setJobForm({ ...jobForm, clockIn })} />
                     <TextInput label="Clock out" type="time" value={jobForm.clockOut || ""} onChange={(clockOut) => setJobForm({ ...jobForm, clockOut })} />
+                    <NumberInput label="Opening mileage" value={jobForm.openingMileage || 0} onChange={(openingMileage) => setJobForm({ ...jobForm, openingMileage })} />
+                    <NumberInput label="Closing mileage" value={jobForm.closingMileage || 0} onChange={(closingMileage) => setJobForm({ ...jobForm, closingMileage })} />
                     <TextInput label="WhatsApp navigation link" value={jobForm.navigationLink || ""} onChange={(navigationLink) => setJobForm({ ...jobForm, navigationLink })} />
                     <TextArea className="lg:col-span-1" label="Checklist" value={jobForm.checklist} onChange={(checklist) => setJobForm({ ...jobForm, checklist })} />
                     <TextArea className="lg:col-span-1" label="Remarks" value={jobForm.remarks} onChange={(remarks) => setJobForm({ ...jobForm, remarks })} />
@@ -1588,13 +1691,15 @@ export default function AmcOperationsApp() {
                   </form>
                 }
               >
-                <DataTable headers={["Job", "Client", "Property", "Tech", "Date", "Clock", "Priority", "Status", "Nav", "Actions"]} rows={store.jobs.filter((job) => matchesSearch(search, job)).map((job) => [
+                <DataTable headers={["Job", "Client", "Property", "Team", "Vehicle", "Driver", "KM", "Date", "Priority", "Status", "Nav", "Actions"]} rows={store.jobs.filter((job) => matchesSearch(search, job)).map((job) => [
                   job.title,
                   clientName(job.clientId),
                   propertyName(job.propertyId),
-                  technicianName(job.technicianId),
+                  technicianTeamName(job.teamTechnicianIds || job.technicianId),
+                  vehicleName(job.vehicleId || ""),
+                  driverName(job.driverId || ""),
+                  Math.max((job.closingMileage || 0) - (job.openingMileage || 0), 0),
                   `${job.scheduledDate || "-"} ${job.scheduledTime || ""}`,
-                  `${job.clockIn || "-"} / ${job.clockOut || "-"}`,
                   job.priority,
                   job.status,
                   job.navigationLink ? <a key={`${job.id}-nav`} href={job.navigationLink} target="_blank" className="inline-flex items-center gap-1 font-black text-blue-600"><Navigation className="h-4 w-4" /> Open</a> : "-",
@@ -1632,6 +1737,30 @@ export default function AmcOperationsApp() {
                   <RowActions key={tech.id} onEdit={() => { setTechnicianForm(tech); setFormMode("edit"); setFormOpen(true); }} onDelete={() => remove("technicians", tech.id)} />,
                 ])} />
               </ModulePanel>
+            )}
+
+            {active === "fleet" && (
+              <FleetPanel
+                vehicles={store.vehicles}
+                drivers={store.drivers}
+                jobs={store.jobs}
+                fuelLogs={store.fuelLogs}
+                vehicleForm={vehicleForm}
+                driverForm={driverForm}
+                fuelForm={fuelForm}
+                formOpen={formOpen}
+                formMode={formMode}
+                setVehicleForm={setVehicleForm}
+                setDriverForm={setDriverForm}
+                setFuelForm={setFuelForm}
+                setFormMode={setFormMode}
+                setFormOpen={setFormOpen}
+                upsert={upsert}
+                remove={remove}
+                vehicleName={vehicleName}
+                driverName={driverName}
+                technicianTeamName={technicianTeamName}
+              />
             )}
 
             {active === "quotations" && (
@@ -1840,6 +1969,181 @@ export default function AmcOperationsApp() {
   );
 }
 
+type UpsertRecord = <K extends RecordCollectionKey>(
+  key: K,
+  record: AmcStore[K][number],
+  blank: AmcStore[K][number],
+  prefix: string,
+  reset: (value: never) => void
+) => void;
+
+type RemoveRecord = <K extends RecordCollectionKey>(key: K, id: string) => void;
+
+function FleetPanel({
+  vehicles,
+  drivers,
+  jobs,
+  fuelLogs,
+  vehicleForm,
+  driverForm,
+  fuelForm,
+  formMode,
+  setVehicleForm,
+  setDriverForm,
+  setFuelForm,
+  setFormMode,
+  setFormOpen,
+  upsert,
+  remove,
+  vehicleName,
+  driverName,
+  technicianTeamName,
+}: {
+  vehicles: VehicleRecord[];
+  drivers: DriverRecord[];
+  jobs: JobRecord[];
+  fuelLogs: FuelLogRecord[];
+  vehicleForm: VehicleRecord;
+  driverForm: DriverRecord;
+  fuelForm: FuelLogRecord;
+  formOpen: boolean;
+  formMode: FormMode;
+  setVehicleForm: (value: VehicleRecord) => void;
+  setDriverForm: (value: DriverRecord) => void;
+  setFuelForm: (value: FuelLogRecord) => void;
+  setFormMode: (value: FormMode) => void;
+  setFormOpen: (value: boolean) => void;
+  upsert: UpsertRecord;
+  remove: RemoveRecord;
+  vehicleName: (id: string) => string;
+  driverName: (id: string) => string;
+  technicianTeamName: (ids: string) => string;
+}) {
+  const occupiedJobs = jobs.filter((job) => job.vehicleId && job.status !== "Completed" && job.status !== "Cancelled");
+  const totalFuel = fuelLogs.reduce((sum, log) => sum + log.amount, 0);
+  const totalKm = jobs.reduce(
+    (sum, job) => sum + Math.max((job.closingMileage || 0) - (job.openingMileage || 0), 0),
+    0
+  );
+
+  return (
+    <section className="grid gap-6">
+      <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex gap-4">
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-md bg-red-50 text-red-500 ring-1 ring-red-100">
+            <Truck className="h-6 w-6" />
+          </span>
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-red-500">
+              Dispatch & Fleet
+            </p>
+            <h2 className="mt-2 text-2xl font-black">Fleet</h2>
+            <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-500">
+              Track vehicle availability, assigned drivers, job mileage, and fuel consumption.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <ReportCard label="Vehicles" value={String(vehicles.length)} icon={Truck} />
+        <ReportCard label="Occupied Vehicles" value={String(vehicles.filter((vehicle) => vehicle.status === "Occupied").length)} icon={Truck} />
+        <ReportCard label="Fuel Spend" value={money(totalFuel)} icon={Fuel} />
+        <ReportCard label="KM Recorded" value={String(totalKm)} icon={Gauge} />
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-3">
+        <SettingsCard title="Vehicles" icon={Truck}>
+          <TextInput label="Vehicle code" value={vehicleForm.code} onChange={(code) => setVehicleForm({ ...vehicleForm, code })} />
+          <TextInput label="Plate number" value={vehicleForm.plateNumber} onChange={(plateNumber) => setVehicleForm({ ...vehicleForm, plateNumber })} />
+          <SelectInput label="Vehicle type" value={vehicleForm.type} onChange={(type) => setVehicleForm({ ...vehicleForm, type: type as VehicleRecord["type"] })} options={["Van", "Pickup", "Car", "Bike"].map((value) => [value, value])} />
+          <SelectInput label="Status" value={vehicleForm.status} onChange={(status) => setVehicleForm({ ...vehicleForm, status: status as VehicleRecord["status"] })} options={["Available", "Occupied", "Maintenance", "Off Road"].map((value) => [value, value])} />
+          <NumberInput label="Current mileage" value={vehicleForm.currentMileage} onChange={(currentMileage) => setVehicleForm({ ...vehicleForm, currentMileage })} />
+          <TextInput label="Registration expiry" type="date" value={vehicleForm.registrationExpiry} onChange={(registrationExpiry) => setVehicleForm({ ...vehicleForm, registrationExpiry })} />
+          <TextInput label="Insurance expiry" type="date" value={vehicleForm.insuranceExpiry} onChange={(insuranceExpiry) => setVehicleForm({ ...vehicleForm, insuranceExpiry })} />
+          <TextArea label="Notes" value={vehicleForm.notes} onChange={(notes) => setVehicleForm({ ...vehicleForm, notes })} />
+          <button type="button" onClick={() => upsert("vehicles", vehicleForm, vehicleBlank, "vehicle", setVehicleForm as (value: never) => void)} className="rounded-md bg-red-500 px-5 py-3 text-sm font-black uppercase text-white">
+            {formMode === "edit" ? "Save Vehicle" : "Add Vehicle"}
+          </button>
+        </SettingsCard>
+
+        <SettingsCard title="Drivers" icon={UserRoundCheck}>
+          <TextInput label="Driver name" value={driverForm.name} onChange={(name) => setDriverForm({ ...driverForm, name })} />
+          <TextInput label="Phone" value={driverForm.phone} onChange={(phone) => setDriverForm({ ...driverForm, phone })} />
+          <TextInput label="License number" value={driverForm.licenseNumber} onChange={(licenseNumber) => setDriverForm({ ...driverForm, licenseNumber })} />
+          <SelectInput label="Status" value={driverForm.status} onChange={(status) => setDriverForm({ ...driverForm, status: status as DriverRecord["status"] })} options={["Available", "Assigned", "Off Duty"].map((value) => [value, value])} />
+          <button type="button" onClick={() => upsert("drivers", driverForm, driverBlank, "driver", setDriverForm as (value: never) => void)} className="rounded-md bg-red-500 px-5 py-3 text-sm font-black uppercase text-white">
+            {formMode === "edit" ? "Save Driver" : "Add Driver"}
+          </button>
+        </SettingsCard>
+
+        <SettingsCard title="Fuel Logs" icon={Fuel}>
+          <SelectInput label="Vehicle" value={fuelForm.vehicleId} onChange={(vehicleId) => setFuelForm({ ...fuelForm, vehicleId })} options={vehicles.map((vehicle) => [vehicle.id, `${vehicle.code} - ${vehicle.plateNumber}`])} />
+          <SelectInput label="Driver" value={fuelForm.driverId} onChange={(driverId) => setFuelForm({ ...fuelForm, driverId })} options={drivers.map((driver) => [driver.id, driver.name])} />
+          <SelectInput label="Linked job" value={fuelForm.jobId} onChange={(jobId) => setFuelForm({ ...fuelForm, jobId })} options={jobs.map((job) => [job.id, job.title])} />
+          <TextInput label="Date" type="date" value={fuelForm.date} onChange={(date) => setFuelForm({ ...fuelForm, date })} />
+          <NumberInput label="Odometer" value={fuelForm.odometer} onChange={(odometer) => setFuelForm({ ...fuelForm, odometer })} />
+          <NumberInput label="Litres" value={fuelForm.litres} onChange={(litres) => setFuelForm({ ...fuelForm, litres })} />
+          <NumberInput label="Amount" value={fuelForm.amount} onChange={(amount) => setFuelForm({ ...fuelForm, amount })} />
+          <TextInput label="Fuel station" value={fuelForm.station} onChange={(station) => setFuelForm({ ...fuelForm, station })} />
+          <button type="button" onClick={() => upsert("fuelLogs", fuelForm, fuelBlank, "fuel", setFuelForm as (value: never) => void)} className="rounded-md bg-red-500 px-5 py-3 text-sm font-black uppercase text-white">
+            {formMode === "edit" ? "Save Fuel" : "Add Fuel"}
+          </button>
+        </SettingsCard>
+      </div>
+
+      <SummaryTable
+        title="Vehicle Occupancy"
+        icon={Truck}
+        headers={["Vehicle", "Plate", "Status", "Assigned Job", "Driver", "Team"]}
+        rows={vehicles.map((vehicle) => {
+          const job = occupiedJobs.find((item) => item.vehicleId === vehicle.id);
+          return [
+            vehicle.code,
+            vehicle.plateNumber,
+            <StatusPill key={`${vehicle.id}-status`} label={vehicle.status} tone={vehicle.status === "Available" ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : vehicle.status === "Occupied" ? "bg-amber-50 text-amber-700 ring-amber-200" : "bg-red-50 text-red-700 ring-red-200"} />,
+            job?.title || "-",
+            job ? driverName(job.driverId || "") : "-",
+            job ? technicianTeamName(job.teamTechnicianIds || job.technicianId) : "-",
+          ];
+        })}
+      />
+
+      <SummaryTable
+        title="Vehicles"
+        icon={Truck}
+        headers={["Vehicle", "Plate", "Type", "Mileage", "Registration", "Insurance", "Actions"]}
+        rows={vehicles.map((vehicle) => [
+          vehicle.code,
+          vehicle.plateNumber,
+          vehicle.type,
+          vehicle.currentMileage,
+          vehicle.registrationExpiry || "-",
+          vehicle.insuranceExpiry || "-",
+          <RowActions key={vehicle.id} onEdit={() => { setVehicleForm(vehicle); setFormMode("edit"); setFormOpen(false); }} onDelete={() => remove("vehicles", vehicle.id)} />,
+        ])}
+      />
+
+      <SummaryTable
+        title="Fuel Consumption"
+        icon={Fuel}
+        headers={["Date", "Vehicle", "Driver", "Job", "Odometer", "Litres", "Amount", "AED / Litre", "Actions"]}
+        rows={fuelLogs.map((log) => [
+          log.date || "-",
+          vehicleName(log.vehicleId),
+          driverName(log.driverId),
+          jobs.find((job) => job.id === log.jobId)?.title || "-",
+          log.odometer,
+          log.litres,
+          money(log.amount),
+          log.litres ? money(log.amount / log.litres) : "-",
+          <RowActions key={log.id} onEdit={() => { setFuelForm(log); setFormMode("edit"); setFormOpen(false); }} onDelete={() => remove("fuelLogs", log.id)} />,
+        ])}
+      />
+    </section>
+  );
+}
+
 function Dashboard({
   stats,
   jobs,
@@ -1848,6 +2152,8 @@ function Dashboard({
   clientName,
   propertyName,
   technicianName,
+  vehicleName,
+  driverName,
 }: {
   stats: DashboardStats;
   jobs: JobRecord[];
@@ -1856,6 +2162,8 @@ function Dashboard({
   clientName: (id: string) => string;
   propertyName: (id: string) => string;
   technicianName: (id: string) => string;
+  vehicleName: (id: string) => string;
+  driverName: (id: string) => string;
 }) {
   const cards: {
     label: string;
@@ -1969,6 +2277,20 @@ function Dashboard({
       icon: UserRoundCheck,
       tone: "bg-sky-50 text-sky-600 ring-sky-100",
     },
+    {
+      label: "Occupied Vehicles",
+      value: stats.occupiedVehicles,
+      helper: `${stats.availableVehicles} vehicles available`,
+      icon: Truck,
+      tone: "bg-orange-50 text-orange-600 ring-orange-100",
+    },
+    {
+      label: "Fuel Spend",
+      value: money(stats.fuelSpend),
+      helper: "Recorded fleet fuel cost",
+      icon: Fuel,
+      tone: "bg-lime-50 text-lime-700 ring-lime-100",
+    },
   ];
 
   return (
@@ -2007,9 +2329,11 @@ function Dashboard({
             clientName(job.clientId),
             propertyName(job.propertyId),
             technicianName(job.technicianId),
+            vehicleName(job.vehicleId || ""),
+            driverName(job.driverId || ""),
             job.status,
           ])}
-          headers={["Job", "Client", "Property", "Tech", "Status"]}
+          headers={["Job", "Client", "Property", "Tech", "Vehicle", "Driver", "Status"]}
         />
         <SummaryTable
           title="Contract Renewals"
@@ -2165,6 +2489,7 @@ function PpmPanel({
   clientName: (id: string) => string;
   propertyName: (id: string) => string;
 }) {
+  const [expandedContracts, setExpandedContracts] = useState<string[]>([]);
   const ppmRows = contracts
     .flatMap((contract) =>
       contractServiceRows({ ...contractBlank, ...contract }).map((row) => ({
@@ -2173,6 +2498,45 @@ function PpmPanel({
       }))
     )
     .sort((a, b) => (a.status.days ?? 9999) - (b.status.days ?? 9999));
+  const groupedRows = contracts
+    .map((contract) => {
+      const safeContract = { ...contractBlank, ...contract };
+      const services = contractServiceRows(safeContract).sort(
+        (a, b) => (a.status.days ?? 9999) - (b.status.days ?? 9999)
+      );
+      const overdueCount = services.filter(
+        (service) => service.status.days !== null && service.status.days < 0
+      ).length;
+      const dueSoonCount = services.filter(
+        (service) =>
+          service.status.days !== null &&
+          service.status.days >= 0 &&
+          service.status.days <= 7
+      ).length;
+      const nextService = services[0];
+
+      return {
+        contract: safeContract,
+        services,
+        overdueCount,
+        dueSoonCount,
+        nextService,
+      };
+    })
+    .sort((a, b) => {
+      const aDays = a.nextService?.status.days ?? 9999;
+      const bDays = b.nextService?.status.days ?? 9999;
+
+      return aDays - bDays;
+    });
+
+  function toggleContract(contractId: string) {
+    setExpandedContracts((current) =>
+      current.includes(contractId)
+        ? current.filter((id) => id !== contractId)
+        : [...current, contractId]
+    );
+  }
 
   return (
     <section className="grid gap-6">
@@ -2231,18 +2595,157 @@ function PpmPanel({
       <SummaryTable
         title="All PPM Checklists"
         icon={ClipboardCheck}
-        headers={["Client", "Property", "Service", "Visits / Year", "Last Service", "Next Due", "Status"]}
-        rows={ppmRows.map((row) => [
-          clientName(row.contract.clientId),
-          propertyName(row.contract.propertyId),
-          row.label,
-          row.visits,
-          row.lastDate || "-",
-          row.dueDate || "-",
-          <StatusPill key={`${row.contract.id}-${row.service}-all`} label={row.status.label} tone={row.status.tone} />,
-        ])}
+        customContent={
+          <PpmChecklistTable
+            rows={groupedRows}
+            expandedContracts={expandedContracts}
+            onToggle={toggleContract}
+            clientName={clientName}
+            propertyName={propertyName}
+          />
+        }
       />
     </section>
+  );
+}
+
+function PpmChecklistTable({
+  rows,
+  expandedContracts,
+  onToggle,
+  clientName,
+  propertyName,
+}: {
+  rows: {
+    contract: ContractRecord;
+    services: ReturnType<typeof contractServiceRows>;
+    overdueCount: number;
+    dueSoonCount: number;
+    nextService: ReturnType<typeof contractServiceRows>[number];
+  }[];
+  expandedContracts: string[];
+  onToggle: (contractId: string) => void;
+  clientName: (id: string) => string;
+  propertyName: (id: string) => string;
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[920px] text-left text-sm">
+        <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+          <tr>
+            {[
+              "",
+              "Client",
+              "Property",
+              "Plan",
+              "Services",
+              "Next Due",
+              "PPM Status",
+            ].map((header) => (
+              <th key={header || "expand"} className="px-5 py-3">
+                {header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {rows.map((row) => {
+            const expanded = expandedContracts.includes(row.contract.id);
+            const statusLabel = row.overdueCount
+              ? `${row.overdueCount} overdue`
+              : row.dueSoonCount
+                ? `${row.dueSoonCount} due this week`
+                : "Scheduled";
+            const statusTone = row.overdueCount
+              ? "bg-red-50 text-red-700 ring-red-200"
+              : row.dueSoonCount
+                ? "bg-blue-50 text-blue-700 ring-blue-200"
+                : "bg-emerald-50 text-emerald-700 ring-emerald-200";
+
+            return (
+              <Fragment key={row.contract.id}>
+                <tr>
+                  <td className="px-5 py-4 align-top">
+                    <button
+                      type="button"
+                      onClick={() => onToggle(row.contract.id)}
+                      className="grid h-9 w-9 place-items-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
+                      aria-label={expanded ? "Collapse PPM services" : "Expand PPM services"}
+                      title={expanded ? "Collapse" : "Expand"}
+                    >
+                      <ChevronDown
+                        className={`h-4 w-4 transition ${expanded ? "rotate-180" : ""}`}
+                      />
+                    </button>
+                  </td>
+                  <td className="px-5 py-4 align-top font-semibold text-slate-700">
+                    {clientName(row.contract.clientId)}
+                  </td>
+                  <td className="px-5 py-4 align-top font-semibold text-slate-700">
+                    {propertyName(row.contract.propertyId)}
+                  </td>
+                  <td className="px-5 py-4 align-top font-semibold text-slate-700">
+                    {row.contract.plan}
+                  </td>
+                  <td className="px-5 py-4 align-top font-semibold text-slate-700">
+                    {row.services.map((service) => service.label).join(", ")}
+                  </td>
+                  <td className="px-5 py-4 align-top font-semibold text-slate-700">
+                    {row.nextService?.dueDate || "-"}
+                  </td>
+                  <td className="px-5 py-4 align-top">
+                    <StatusPill label={statusLabel} tone={statusTone} />
+                  </td>
+                </tr>
+                {expanded && (
+                  <tr>
+                    <td className="bg-slate-50 px-5 py-4" colSpan={7}>
+                      <div className="grid gap-3 lg:grid-cols-2">
+                        {row.services.map((service) => (
+                          <div
+                            key={`${row.contract.id}-${service.service}`}
+                            className="rounded-md border border-slate-200 bg-white p-4"
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div>
+                                <h4 className="font-black text-slate-900">
+                                  {service.label}
+                                </h4>
+                                <p className="mt-1 text-xs font-bold text-slate-500">
+                                  {service.visits} visits / year
+                                </p>
+                              </div>
+                              <StatusPill
+                                label={service.status.label}
+                                tone={service.status.tone}
+                              />
+                            </div>
+                            <div className="mt-4 grid gap-3 text-sm font-semibold text-slate-600 sm:grid-cols-2">
+                              <div>
+                                <span className="block text-xs font-black uppercase text-slate-400">
+                                  Last Service
+                                </span>
+                                {service.lastDate || "-"}
+                              </div>
+                              <div>
+                                <span className="block text-xs font-black uppercase text-slate-400">
+                                  Next Due
+                                </span>
+                                {service.dueDate || "-"}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -3509,12 +4012,14 @@ function SummaryTable({
   tone = "slate",
   headers,
   rows,
+  customContent,
 }: {
   title: string;
   icon?: LucideIcon;
   tone?: "slate" | "blue" | "green" | "amber" | "red";
-  headers: string[];
-  rows: React.ReactNode[][];
+  headers?: string[];
+  rows?: React.ReactNode[][];
+  customContent?: React.ReactNode;
 }) {
   const Icon = icon || ClipboardList;
   const tones = {
@@ -3542,7 +4047,7 @@ function SummaryTable({
           {title}
         </h2>
       </div>
-      <DataTable headers={headers} rows={rows} />
+      {customContent || <DataTable headers={headers || []} rows={rows || []} />}
     </div>
   );
 }

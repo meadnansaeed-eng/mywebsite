@@ -69,11 +69,36 @@ export type TechnicianRecord = {
   todayCapacity: number;
 };
 
+export type VehicleRecord = {
+  id: string;
+  code: string;
+  plateNumber: string;
+  type: "Van" | "Pickup" | "Car" | "Bike";
+  status: "Available" | "Occupied" | "Maintenance" | "Off Road";
+  currentMileage: number;
+  registrationExpiry: string;
+  insuranceExpiry: string;
+  notes: string;
+};
+
+export type DriverRecord = {
+  id: string;
+  name: string;
+  phone: string;
+  licenseNumber: string;
+  status: "Available" | "Assigned" | "Off Duty";
+};
+
 export type JobRecord = {
   id: string;
   clientId: string;
   propertyId: string;
   technicianId: string;
+  teamTechnicianIds: string;
+  vehicleId: string;
+  driverId: string;
+  openingMileage: number;
+  closingMileage: number;
   title: string;
   priority: "Low" | "Normal" | "High" | "Emergency";
   status:
@@ -148,6 +173,20 @@ export type ComplaintRecord = {
   resolvedDate: string;
   status: "Open" | "In Progress" | "Resolved";
   resolutionNotes: string;
+};
+
+export type FuelLogRecord = {
+  id: string;
+  vehicleId: string;
+  driverId: string;
+  jobId: string;
+  date: string;
+  odometer: number;
+  litres: number;
+  amount: number;
+  station: string;
+  receiptUrl: string;
+  notes: string;
 };
 
 export type PlanRule = {
@@ -227,12 +266,15 @@ export type AmcStore = {
   properties: PropertyRecord[];
   contracts: ContractRecord[];
   technicians: TechnicianRecord[];
+  vehicles: VehicleRecord[];
+  drivers: DriverRecord[];
   jobs: JobRecord[];
   quotations: QuotationRecord[];
   invoices: InvoiceRecord[];
   inventory: InventoryRecord[];
   expenses: ExpenseRecord[];
   complaints: ComplaintRecord[];
+  fuelLogs: FuelLogRecord[];
   communities: string[];
   areas: string[];
   locationAreas: LocationArea[];
@@ -246,12 +288,15 @@ export const emptyStore: AmcStore = {
   properties: [],
   contracts: [],
   technicians: [],
+  vehicles: [],
+  drivers: [],
   jobs: [],
   quotations: [],
   invoices: [],
   inventory: [],
   expenses: [],
   complaints: [],
+  fuelLogs: [],
   communities: [],
   areas: [],
   locationAreas: [],
@@ -632,6 +677,63 @@ export const demoProperties: PropertyRecord[] = demoClients.flatMap(
   }
 );
 
+function createDemoContract(
+  id: string,
+  clientId: string,
+  propertyId: string,
+  plan: string,
+  lastServiceDate: string,
+  status: ContractRecord["status"] = "Active",
+  value = 8500
+): ContractRecord {
+  const rule =
+    plan === "Platinum"
+      ? { ac: 3, duct: 3, tank: 2, solar: 2 }
+      : plan === "Gold"
+        ? { ac: 2, duct: 2, tank: 2, solar: 2 }
+        : { ac: 1, duct: 1, tank: 1, solar: 1 };
+
+  return {
+    id,
+    clientId,
+    propertyId,
+    plan,
+    type: "Full villa AMC",
+    startDate: "2025-11-01",
+    endDate: "2026-10-31",
+    lastAcServiceDate: lastServiceDate,
+    lastDuctCleaningDate: lastServiceDate,
+    lastWaterTankCleaningDate: lastServiceDate,
+    lastSolarHeaterCleaningDate: lastServiceDate,
+    includedAcServices: rule.ac,
+    includedDuctCleanings: rule.duct,
+    includedWaterTankCleanings: rule.tank,
+    includedSolarHeaterCleanings: rule.solar,
+    customPlanNotes: "",
+    visits: rule.ac + rule.duct + rule.tank + rule.solar,
+    included: "AC service, duct cleaning, water tank cleaning, solar heater cleaning",
+    excluded: "Major spare parts, authority approvals, structural works",
+    warranty: "30 days workmanship",
+    emergencySupport: "24/7 call-out support",
+    sla: "4 hours emergency, 24 hours standard",
+    value,
+    status,
+  };
+}
+
+export const demoContracts: ContractRecord[] = [
+  createDemoContract("contract-1", "client-1", "property-1", "Gold", "2025-11-25", "Active", 8500),
+  createDemoContract("contract-2", "client-amc-3", "property-client-amc-3-1", "Platinum", "2026-01-25", "Active", 12500),
+  createDemoContract("contract-3", "client-amc-9", "property-client-amc-9-1", "Gold", "2025-11-10", "Active", 8200),
+  createDemoContract("contract-4", "client-amc-17", "property-client-amc-17-1", "Silver", "2025-05-12", "Expiring", 4800),
+  createDemoContract("contract-5", "client-amc-2", "property-client-amc-2-1", "Platinum", "2026-01-19", "Active", 11800),
+  createDemoContract("contract-6", "client-amc-5", "property-client-amc-5-1", "Gold", "2025-11-28", "Active", 7900),
+  createDemoContract("contract-7", "client-amc-7", "property-client-amc-7-1", "Silver", "2025-04-30", "Active", 4500),
+  createDemoContract("contract-8", "client-amc-13", "property-client-amc-13-1", "Platinum", "2026-01-15", "Active", 13200),
+  createDemoContract("contract-9", "client-amc-21", "property-client-amc-21-1", "Gold", "2025-12-20", "Active", 8700),
+  createDemoContract("contract-10", "client-amc-27", "property-client-amc-27-1", "Silver", "2025-09-01", "Active", 5200),
+];
+
 export const initialStore: AmcStore = {
   clients: demoClients,
   properties: demoProperties,
@@ -726,34 +828,7 @@ export const initialStore: AmcStore = {
         "Your AMC contract is due for renewal on {{renewal_date}}.",
     },
   },
-  contracts: [
-    {
-      id: "contract-1",
-      clientId: "client-1",
-      propertyId: "property-1",
-      plan: "Gold",
-      type: "Full villa AMC",
-      startDate: "2026-01-01",
-      endDate: "2026-12-31",
-      lastAcServiceDate: "2026-01-15",
-      lastDuctCleaningDate: "2026-01-15",
-      lastWaterTankCleaningDate: "2026-01-20",
-      lastSolarHeaterCleaningDate: "2026-01-20",
-      includedAcServices: 2,
-      includedDuctCleanings: 2,
-      includedWaterTankCleanings: 2,
-      includedSolarHeaterCleanings: 2,
-      customPlanNotes: "",
-      visits: 6,
-      included: "AC, plumbing, electrical checks, minor civil inspection",
-      excluded: "Major materials, authority approvals, structural works",
-      warranty: "30 days workmanship",
-      emergencySupport: "24/7 call-out support",
-      sla: "4 hours emergency, 24 hours standard",
-      value: 8500,
-      status: "Active",
-    },
-  ],
+  contracts: demoContracts,
   technicians: [
     {
       id: "tech-1",
@@ -772,12 +847,68 @@ export const initialStore: AmcStore = {
       todayCapacity: 4,
     },
   ],
+  vehicles: [
+    {
+      id: "vehicle-1",
+      code: "Van 01",
+      plateNumber: "D 45821",
+      type: "Van",
+      status: "Occupied",
+      currentMileage: 84250,
+      registrationExpiry: "2026-11-15",
+      insuranceExpiry: "2026-10-30",
+      notes: "Main AMC team van with ladder rack.",
+    },
+    {
+      id: "vehicle-2",
+      code: "Pickup 02",
+      plateNumber: "D 77124",
+      type: "Pickup",
+      status: "Available",
+      currentMileage: 61420,
+      registrationExpiry: "2026-09-20",
+      insuranceExpiry: "2026-09-05",
+      notes: "Used for material delivery and civil jobs.",
+    },
+    {
+      id: "vehicle-3",
+      code: "Car 03",
+      plateNumber: "D 99210",
+      type: "Car",
+      status: "Maintenance",
+      currentMileage: 102880,
+      registrationExpiry: "2026-07-12",
+      insuranceExpiry: "2026-07-01",
+      notes: "Inspection and sales visits.",
+    },
+  ],
+  drivers: [
+    {
+      id: "driver-1",
+      name: "Mohammed Salim",
+      phone: "+971 55 445 1200",
+      licenseNumber: "DXB-778812",
+      status: "Assigned",
+    },
+    {
+      id: "driver-2",
+      name: "Arun Prakash",
+      phone: "+971 52 330 8811",
+      licenseNumber: "DXB-441902",
+      status: "Available",
+    },
+  ],
   jobs: [
     {
       id: "job-1",
       clientId: "client-1",
       propertyId: "property-1",
       technicianId: "tech-1",
+      teamTechnicianIds: "tech-1,tech-2",
+      vehicleId: "vehicle-1",
+      driverId: "driver-1",
+      openingMileage: 84210,
+      closingMileage: 84250,
       title: "AC AMC preventive visit",
       priority: "Normal",
       status: "Assigned",
@@ -792,6 +923,21 @@ export const initialStore: AmcStore = {
       beforePhotos: "",
       afterPhotos: "",
       customerSignature: "",
+    },
+  ],
+  fuelLogs: [
+    {
+      id: "fuel-1",
+      vehicleId: "vehicle-1",
+      driverId: "driver-1",
+      jobId: "job-1",
+      date: "2026-05-24",
+      odometer: 84250,
+      litres: 48,
+      amount: 142,
+      station: "ENOC Villanova",
+      receiptUrl: "",
+      notes: "Filled after AMC route.",
     },
   ],
   quotations: [
