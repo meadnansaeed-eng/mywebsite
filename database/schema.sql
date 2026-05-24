@@ -40,9 +40,19 @@ create table if not exists communities (
   created_at timestamptz not null default now()
 );
 
+create table if not exists community_phases (
+  id uuid primary key default gen_random_uuid(),
+  community_id uuid not null references communities(id) on delete cascade,
+  name text not null,
+  created_at timestamptz not null default now(),
+  unique (community_id, name)
+);
+
 create table if not exists clients (
   id uuid primary key default gen_random_uuid(),
   name text not null,
+  client_type text not null default 'walk_in'
+    check (client_type in ('amc_client', 'walk_in', 'lead')),
   phone text,
   whatsapp text,
   email text,
@@ -59,6 +69,9 @@ create table if not exists client_properties (
   title text not null,
   villa_number text,
   area text,
+  phase text,
+  rooms integer not null default 0,
+  ac_units integer not null default 0,
   map_link text,
   access_notes text,
   parking_notes text,

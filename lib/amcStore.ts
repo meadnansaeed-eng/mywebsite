@@ -1,6 +1,7 @@
 export type ClientRecord = {
   id: string;
   name: string;
+  clientType: "AMC Client" | "Walk-in" | "Lead";
   phone: string;
   whatsapp: string;
   email: string;
@@ -15,10 +16,21 @@ export type PropertyRecord = {
   villaNumber: string;
   community: string;
   area: string;
+  phase: string;
+  rooms: number;
+  acUnits: number;
   mapLink: string;
   accessNotes: string;
   parkingNotes: string;
   gateAccess: string;
+};
+
+export type LocationArea = {
+  name: string;
+  communities: {
+    name: string;
+    phases: string[];
+  }[];
 };
 
 export type ContractRecord = {
@@ -223,6 +235,7 @@ export type AmcStore = {
   complaints: ComplaintRecord[];
   communities: string[];
   areas: string[];
+  locationAreas: LocationArea[];
   plans: string[];
   planRules: PlanRule[];
   crmSettings: CrmSettings;
@@ -241,6 +254,7 @@ export const emptyStore: AmcStore = {
   complaints: [],
   communities: [],
   areas: [],
+  locationAreas: [],
   plans: [],
   planRules: [],
   crmSettings: {
@@ -298,69 +312,338 @@ export const emptyStore: AmcStore = {
   },
 };
 
+const amcClientNames = [
+  "Ahmed Al Mansoori",
+  "Fatima Al Qasimi",
+  "Omar Haddad",
+  "Mariam Al Nuaimi",
+  "Khalid Al Suwaidi",
+  "Nadia Rahman",
+  "Hassan Farooq",
+  "Leila Darwish",
+  "Yousef Karim",
+  "Aisha Mahmoud",
+  "Rashid Al Balooshi",
+  "Samira Khan",
+  "Bilal Siddiqui",
+  "Noor Al Falasi",
+  "Tariq Ibrahim",
+  "Huda Al Mehairi",
+  "Adnan Malik",
+  "Reem Abdullah",
+  "Faisal Noor",
+  "Zainab Ali",
+  "Imran Shah",
+  "Mona Yasin",
+  "Saif Al Ketbi",
+  "Amna Saeed",
+  "Farhan Qureshi",
+  "Lina George",
+  "Majid Salem",
+  "Sana Akhtar",
+  "Ibrahim Nasser",
+];
+
+const walkInClientNames = [
+  "Green Vista Homes",
+  "Dubai Marina Tenant",
+  "Palm View Residence",
+  "JVC Apartment 1205",
+  "Arabian Ranches Villa",
+  "Damac Hills Tenant",
+  "Business Bay Office",
+  "Al Barsha Homeowner",
+  "Mirdif Villa Client",
+  "Dubai Hills Townhouse",
+  "Jumeirah Villa Owner",
+  "The Springs Resident",
+  "Motor City Apartment",
+  "Nad Al Sheba Villa",
+  "Silicon Oasis Office",
+  "Town Square Resident",
+  "Meadows Villa Client",
+  "JLT Office Manager",
+  "Al Furjan Townhouse",
+  "Sports City Tenant",
+  "Discovery Gardens Flat",
+  "Emirates Hills Villa",
+  "Meydan Property Owner",
+  "Tecom Office Client",
+  "Al Warqa Homeowner",
+  "Dubai Creek Tenant",
+  "Festival City Villa",
+  "Al Safa Apartment",
+  "Jaddaf Building Unit",
+];
+
+const leadClientNames = [
+  "Elite Villa Inquiry",
+  "Prime Home Renovation Lead",
+  "Golden Sands Property",
+  "Horizon Facilities Lead",
+  "Maple Community Inquiry",
+  "Rosewood Villa Prospect",
+  "Urban Nest Lead",
+  "Marina Crown Inquiry",
+  "Creekside Villa Prospect",
+  "Palm Estate Lead",
+  "Sunrise Home Inquiry",
+  "Bluewater Apartment Lead",
+  "Evergreen Villa Prospect",
+  "Skyline Maintenance Lead",
+  "Orchid Homes Inquiry",
+  "Pearl Residence Lead",
+  "Vista Heights Prospect",
+  "Harbor Point Inquiry",
+  "Cedar Villa Lead",
+  "Lagoon View Prospect",
+  "Sapphire Homes Inquiry",
+  "Metro Living Lead",
+  "Gardenia Villa Prospect",
+  "Al Qudra Home Inquiry",
+  "Falcon Estate Lead",
+  "Canal View Prospect",
+  "Downtown Loft Inquiry",
+  "Terrace Villa Lead",
+  "Oasis Park Prospect",
+  "Nova Homes Inquiry",
+];
+
+function createDemoClient(
+  id: string,
+  name: string,
+  clientType: ClientRecord["clientType"],
+  index: number
+): ClientRecord {
+  const phoneSuffix = String(2300000 + index).slice(-7);
+  const cleanName = name.toLowerCase().replace(/[^a-z0-9]+/g, ".");
+
+  return {
+    id,
+    name,
+    clientType,
+    phone: `+971 50 ${phoneSuffix.slice(0, 3)} ${phoneSuffix.slice(3)}`,
+    whatsapp: `+971 50 ${phoneSuffix.slice(0, 3)} ${phoneSuffix.slice(3)}`,
+    email: `${cleanName}@example.com`,
+    company: clientType === "AMC Client" ? "" : name,
+    notes:
+      clientType === "AMC Client"
+        ? "Demo AMC client with service history and renewal follow-up."
+        : clientType === "Lead"
+          ? "Demo lead for quotation and AMC conversion follow-up."
+          : "Demo one-time / walk-in client for service job flow.",
+  };
+}
+
+const demoClientsSeed: ClientRecord[] = [
+  {
+    id: "client-1",
+    name: "Sarah Al Maktoum",
+    clientType: "AMC Client",
+    phone: "+971 50 236 5485",
+    whatsapp: "+971 50 236 5485",
+    email: "sarah@example.com",
+    company: "",
+    notes: "Prefers morning visits. Full villa AMC customer.",
+  },
+  ...amcClientNames.map((name, index) =>
+    createDemoClient(`client-amc-${index + 2}`, name, "AMC Client", index + 2)
+  ),
+  {
+    id: "client-2",
+    name: "Blue Palm Properties",
+    clientType: "Walk-in",
+    phone: "+971 55 901 1144",
+    whatsapp: "+971 55 901 1144",
+    email: "ops@bluepalm.example",
+    company: "Blue Palm Properties",
+    notes: "Manages multiple building maintenance jobs in JVC.",
+  },
+  ...walkInClientNames.map((name, index) =>
+    createDemoClient(
+      `client-walkin-${index + 2}`,
+      name,
+      "Walk-in",
+      index + 32
+    )
+  ),
+  ...leadClientNames.map((name, index) =>
+    createDemoClient(`client-lead-${index + 1}`, name, "Lead", index + 61)
+  ),
+];
+
+export const demoClients: ClientRecord[] = [...demoClientsSeed].sort((a, b) => {
+  const scoreA = (a.id.charCodeAt(a.id.length - 1) * 17 + a.name.length) % 97;
+  const scoreB = (b.id.charCodeAt(b.id.length - 1) * 17 + b.name.length) % 97;
+
+  return scoreA - scoreB || a.name.localeCompare(b.name);
+});
+
+export const defaultLocationAreas: LocationArea[] = [
+    {
+      name: "Wadi Al Safa 5",
+      communities: [
+        {
+          name: "Villanova",
+          phases: [
+            "La Quinta",
+            "La Rosa 1",
+            "La Rosa 2",
+            "Amaranta 1",
+            "Amaranta 2",
+          ],
+        },
+      ],
+    },
+    {
+      name: "Dubai",
+      communities: [
+        {
+          name: "JVC",
+          phases: ["District 10", "District 11", "District 12"],
+        },
+        {
+          name: "Dubai Hills",
+          phases: ["Maple 1", "Maple 2", "Sidra"],
+        },
+      ],
+    },
+    {
+      name: "Arabian Ranches",
+      communities: [
+        {
+          name: "Arabian Ranches",
+          phases: ["Al Reem", "Saheel", "Mirador"],
+        },
+      ],
+    },
+    {
+      name: "Damac Hills",
+      communities: [
+        {
+          name: "Damac Hills",
+          phases: ["The Park Villas", "Brookfield", "Richmond"],
+        },
+      ],
+    },
+    {
+      name: "Jumeirah",
+      communities: [
+        {
+          name: "Jumeirah",
+          phases: ["Jumeirah 1", "Jumeirah 2", "Jumeirah 3"],
+        },
+      ],
+    },
+  ];
+
+const propertyLocations = defaultLocationAreas.flatMap((area) =>
+  area.communities.flatMap((community) =>
+    community.phases.map((phase) => ({
+      area: area.name,
+      community: community.name,
+      phase,
+    }))
+  )
+);
+
+const noPropertyClientIds = new Set([
+  "client-lead-3",
+  "client-walkin-7",
+  "client-amc-11",
+  "client-lead-18",
+]);
+
+const twoPropertyClientIds = new Set([
+  "client-2",
+  "client-amc-3",
+  "client-amc-9",
+  "client-amc-17",
+  "client-walkin-4",
+  "client-walkin-12",
+  "client-walkin-24",
+  "client-lead-6",
+  "client-lead-14",
+  "client-lead-25",
+]);
+
+function createDemoProperty(
+  client: ClientRecord,
+  index: number,
+  propertyNumber: number
+): PropertyRecord {
+  const location = propertyLocations[(index + propertyNumber) % propertyLocations.length];
+  const isBuilding = client.company && propertyNumber === 1;
+  const id =
+    client.id === "client-1" && propertyNumber === 1
+      ? "property-1"
+      : client.id === "client-2" && propertyNumber === 1
+        ? "property-2"
+        : `property-${client.id}-${propertyNumber}`;
+
+  return {
+    id,
+    clientId: client.id,
+    title:
+      client.id === "client-1" && propertyNumber === 1
+        ? "Villa 42"
+        : client.id === "client-2" && propertyNumber === 1
+          ? "Building B"
+          : isBuilding
+            ? `Building ${String.fromCharCode(64 + ((index % 6) + 1))}`
+            : `Villa ${20 + index}${propertyNumber > 1 ? `-${propertyNumber}` : ""}`,
+    villaNumber:
+      client.id === "client-1" && propertyNumber === 1
+        ? "42"
+        : client.id === "client-2" && propertyNumber === 1
+          ? "B"
+          : `${20 + index}${propertyNumber > 1 ? `-${propertyNumber}` : ""}`,
+    area: location.area,
+    community: location.community,
+    phase: location.phase,
+    rooms: isBuilding ? 12 + (index % 12) : 2 + (index % 5),
+    acUnits: isBuilding ? 16 + (index % 15) : 3 + (index % 6),
+    mapLink: "https://maps.google.com",
+    accessNotes:
+      propertyNumber > 1
+        ? "Second property under same client. Confirm access before visit."
+        : "Call customer before arrival and confirm access.",
+    parkingNotes: isBuilding
+      ? "Use visitor or basement parking."
+      : "Park near villa service entrance.",
+    gateAccess:
+      client.id === "client-1" && propertyNumber === 1
+        ? "Security approval by WhatsApp."
+        : "Community security may request job card.",
+  };
+}
+
+export const demoProperties: PropertyRecord[] = demoClients.flatMap(
+  (client, index) => {
+    if (noPropertyClientIds.has(client.id)) {
+      return [];
+    }
+
+    const propertyCount = twoPropertyClientIds.has(client.id) ? 2 : 1;
+
+    return Array.from({ length: propertyCount }, (_, propertyIndex) =>
+      createDemoProperty(client, index, propertyIndex + 1)
+    );
+  }
+);
+
 export const initialStore: AmcStore = {
-  clients: [
-    {
-      id: "client-1",
-      name: "Sarah Al Maktoum",
-      phone: "+971 50 236 5485",
-      whatsapp: "+971 50 236 5485",
-      email: "sarah@example.com",
-      company: "",
-      notes: "Prefers morning visits. Full villa AMC customer.",
-    },
-    {
-      id: "client-2",
-      name: "Blue Palm Properties",
-      phone: "+971 55 901 1144",
-      whatsapp: "+971 55 901 1144",
-      email: "ops@bluepalm.example",
-      company: "Blue Palm Properties",
-      notes: "Manages multiple building maintenance jobs in JVC.",
-    },
-  ],
-  properties: [
-    {
-      id: "property-1",
-      clientId: "client-1",
-      title: "Villa 42",
-      villaNumber: "42",
-      community: "La Rosa",
-      area: "Villanova",
-      mapLink: "https://maps.google.com",
-      accessNotes: "Gate pass required before arrival.",
-      parkingNotes: "Park near service entrance.",
-      gateAccess: "Security approval by WhatsApp.",
-    },
-    {
-      id: "property-2",
-      clientId: "client-2",
-      title: "Building B",
-      villaNumber: "B",
-      community: "JVC",
-      area: "Dubai",
-      mapLink: "https://maps.google.com",
-      accessNotes: "Call facility supervisor on arrival.",
-      parkingNotes: "Basement visitor parking.",
-      gateAccess: "Reception access card required.",
-    },
-  ],
-  communities: [
-    "La Rosa",
-    "Villanova",
-    "Arabian Ranches",
-    "Damac Hills",
-    "Dubai Hills",
-    "JVC",
-  ],
-  areas: [
-    "Dubai",
-    "Villanova",
-    "Arabian Ranches",
-    "Damac Hills",
-    "Dubai Hills",
-    "Jumeirah",
-  ],
+  clients: demoClients,
+  properties: demoProperties,
+  communities: Array.from(
+    new Set(
+      defaultLocationAreas.flatMap((area) =>
+        area.communities.map((community) => community.name)
+      )
+    )
+  ),
+  areas: defaultLocationAreas.map((area) => area.name),
+  locationAreas: defaultLocationAreas,
   plans: ["Silver", "Gold", "Platinum"],
   planRules: [
     {

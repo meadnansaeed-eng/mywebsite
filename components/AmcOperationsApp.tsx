@@ -36,6 +36,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import {
+  demoClients,
+  demoProperties,
   initialStore,
   makeId,
   type AmcStore,
@@ -47,6 +49,7 @@ import {
   type InventoryRecord,
   type InvoiceRecord,
   type JobRecord,
+  type LocationArea,
   type PlanRule,
   type PropertyRecord,
   type QuotationRecord,
@@ -86,6 +89,9 @@ type RecordCollectionKey =
 
 type DashboardStats = {
   clients: number;
+  amcClients: number;
+  walkInClients: number;
+  leads: number;
   properties: number;
   activeContracts: number;
   expiringContracts: number;
@@ -108,6 +114,14 @@ type DashboardStats = {
   renewalRate: number;
   complaintResolutionDays: number;
 };
+
+type ClientType = ClientRecord["clientType"];
+
+const clientTypes: ClientType[] = [
+  "AMC Client",
+  "Walk-in",
+  "Lead",
+];
 
 const storageKey = "amc-operations-store-v1";
 
@@ -171,6 +185,7 @@ const sectionIconTone = "bg-white/15 text-white";
 const clientBlank: ClientRecord = {
   id: "",
   name: "",
+  clientType: "Walk-in",
   phone: "",
   whatsapp: "",
   email: "",
@@ -185,6 +200,9 @@ const propertyBlank: PropertyRecord = {
   villaNumber: "",
   community: "",
   area: "",
+  phase: "",
+  rooms: 0,
+  acUnits: 0,
   mapLink: "",
   accessNotes: "",
   parkingNotes: "",
@@ -460,13 +478,149 @@ function dueStatus(dueDate: string) {
   };
 }
 
+function clientTypeTone(clientType: ClientType) {
+  if (clientType === "AMC Client") {
+    return "bg-emerald-50 text-emerald-700 ring-emerald-200";
+  }
+
+  if (clientType === "Lead") {
+    return "bg-amber-50 text-amber-700 ring-amber-200";
+  }
+
+  return "bg-blue-50 text-blue-700 ring-blue-200";
+}
+
+function normalizeClientType(value: string | undefined): ClientType {
+  if (value === "AMC Client" || value === "Lead" || value === "Walk-in") {
+    return value;
+  }
+
+  if (value === "One-Time / Walk-in") {
+    return "Walk-in";
+  }
+
+  return "Walk-in";
+}
+
+function sortClientsForDisplay(clients: ClientRecord[]) {
+  const demoOrder = new Map(
+    demoClients.map((client, index) => [client.id, index])
+  );
+
+  return [...clients].sort((a, b) => {
+    const aOrder = demoOrder.get(a.id);
+    const bOrder = demoOrder.get(b.id);
+
+    if (aOrder !== undefined && bOrder !== undefined) {
+      return aOrder - bOrder;
+    }
+    if (aOrder !== undefined) return 1;
+    if (bOrder !== undefined) return -1;
+
+    return 0;
+  });
+}
+
+function uniqueSorted(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean))).sort((a, b) =>
+    a.localeCompare(b)
+  );
+}
+
+function buildLocationAreas(saved: Partial<AmcStore>): LocationArea[] {
+  if (saved.locationAreas?.length) {
+    return saved.locationAreas.map((area) => ({
+      ...area,
+      communities: area.communities.map((community) => ({
+        ...community,
+        phases: uniqueSorted(community.phases || []),
+      })),
+    }));
+  }
+
+  const areaNames = uniqueSorted([
+    ...initialStore.locationAreas.map((area) => area.name),
+    ...(saved.areas || []),
+    ...(saved.properties || []).map((property) => property.area),
+  ]);
+
+  return areaNames.map((areaName) => {
+    const initialArea = initialStore.locationAreas.find(
+      (area) => area.name === areaName
+    );
+    const propertyCommunities = (saved.properties || [])
+      .filter((property) => property.area === areaName)
+      .map((property) => property.community);
+    const communityNames = uniqueSorted([
+      ...(initialArea?.communities.map((community) => community.name) || []),
+      ...(areaName === "Wadi Al Safa 5" ? ["Villanova"] : []),
+      ...propertyCommunities,
+    ]);
+
+    return {
+      name: areaName,
+      communities: communityNames.map((communityName) => {
+        const initialCommunity = initialArea?.communities.find(
+          (community) => community.name === communityName
+        );
+        const propertyPhases = (saved.properties || [])
+          .filter(
+            (property) =>
+              property.area === areaName && property.community === communityName
+          )
+          .map((property) => property.phase);
+
+        return {
+          name: communityName,
+          phases: uniqueSorted([
+            ...(initialCommunity?.phases || []),
+            ...propertyPhases,
+          ]),
+        };
+      }),
+    };
+  });
+}
+
 function normalizeStore(saved: Partial<AmcStore>): AmcStore {
+  const savedContracts = saved.contracts || [];
+  const clients = (saved.clients || []).map((client) => ({
+    ...client,
+    clientType: savedContracts.some((contract) => contract.clientId === client.id)
+      ? "AMC Client"
+      : normalizeClientType((client as ClientRecord & { clientType?: string }).clientType),
+  }));
+  const clientIds = new Set(clients.map((client) => client.id));
+  const mergedClients = [
+    ...clients,
+    ...demoClients.filter((client) => !clientIds.has(client.id)),
+  ];
+  const sortedClients = sortClientsForDisplay(mergedClients);
+  const locationAreas = buildLocationAreas(saved);
+  const areas = uniqueSorted(locationAreas.map((area) => area.name));
+  const communities = uniqueSorted(
+    locationAreas.flatMap((area) =>
+      area.communities.map((community) => community.name)
+    )
+  );
+  const savedProperties = (saved.properties || []).map((property) => ({
+    ...property,
+    phase: property.phase || "",
+    rooms: property.rooms || 0,
+    acUnits: property.acUnits || 0,
+  }));
+  const propertyIds = new Set(savedProperties.map((property) => property.id));
+  const mergedProperties = [
+    ...savedProperties,
+    ...demoProperties.filter((property) => !propertyIds.has(property.id)),
+  ];
+
   return {
     ...initialStore,
     ...saved,
-    clients: saved.clients || [],
-    properties: saved.properties || [],
-    contracts: saved.contracts || [],
+    clients: sortedClients,
+    properties: mergedProperties,
+    contracts: savedContracts,
     technicians: saved.technicians || [],
     jobs: saved.jobs || [],
     quotations: saved.quotations || [],
@@ -474,8 +628,9 @@ function normalizeStore(saved: Partial<AmcStore>): AmcStore {
     inventory: saved.inventory || [],
     expenses: saved.expenses || [],
   complaints: saved.complaints || [],
-  communities: saved.communities || initialStore.communities,
-  areas: saved.areas || initialStore.areas,
+  communities,
+  areas,
+  locationAreas,
   plans: saved.plans || initialStore.plans,
     planRules:
       saved.planRules ||
@@ -522,6 +677,9 @@ export default function AmcOperationsApp() {
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  const [clientTypeFilter, setClientTypeFilter] = useState<"All" | ClientType>(
+    "All"
+  );
 
   const [clientForm, setClientForm] = useState<ClientRecord>(clientBlank);
   const [propertyForm, setPropertyForm] =
@@ -540,6 +698,13 @@ export default function AmcOperationsApp() {
     useState<ComplaintRecord>(complaintBlank);
   const [communityInput, setCommunityInput] = useState("");
   const [areaInput, setAreaInput] = useState("");
+  const [phaseInput, setPhaseInput] = useState("");
+  const [selectedSettingsArea, setSelectedSettingsArea] = useState(
+    initialStore.locationAreas[0]?.name || ""
+  );
+  const [selectedSettingsCommunity, setSelectedSettingsCommunity] = useState(
+    initialStore.locationAreas[0]?.communities[0]?.name || ""
+  );
   const [planInput, setPlanInput] = useState("");
   const [communitySearch, setCommunitySearch] = useState("");
   const [areaSearch, setAreaSearch] = useState("");
@@ -574,6 +739,13 @@ export default function AmcOperationsApp() {
     store.properties
       .filter((property) => !clientId || property.clientId === clientId)
       .map((property) => [property.id, property.title]);
+  const communitiesForArea = (areaName: string) =>
+    store.locationAreas.find((area) => area.name === areaName)?.communities ||
+    [];
+  const phasesForCommunity = (areaName: string, communityName: string) =>
+    communitiesForArea(areaName).find(
+      (community) => community.name === communityName
+    )?.phases || [];
   const technicianName = (id: string) =>
     store.technicians.find((technician) => technician.id === id)?.name ||
     "Unassigned";
@@ -600,7 +772,13 @@ export default function AmcOperationsApp() {
     const earnedAmcRevenue = store.contracts
       .filter((contract) => contract.status === "Active")
       .reduce((sum, contract) => sum + contract.value / 12, 0);
-    const nonAmcRevenue = Math.max(invoiceValue - earnedAmcRevenue, 0);
+    const nonAmcRevenue = store.invoices.reduce((sum, invoice) => {
+      const client = store.clients.find((item) => item.id === invoice.clientId);
+
+      return client?.clientType === "AMC Client"
+        ? sum
+        : sum + totalWithVat(invoice.subtotal, invoice.vatRate);
+    }, 0);
     const expenseValue = store.expenses.reduce(
       (sum, expense) => sum + totalWithVat(expense.amount, expense.vatRate),
       0
@@ -631,6 +809,14 @@ export default function AmcOperationsApp() {
 
     return {
       clients: store.clients.length,
+      amcClients: store.clients.filter(
+        (client) => client.clientType === "AMC Client"
+      ).length,
+      walkInClients: store.clients.filter(
+        (client) => client.clientType === "Walk-in"
+      ).length,
+      leads: store.clients.filter((client) => client.clientType === "Lead")
+        .length,
       properties: store.properties.length,
       activeContracts: store.contracts.filter(
         (contract) => contract.status === "Active"
@@ -700,6 +886,32 @@ export default function AmcOperationsApp() {
     }));
   }
 
+  function saveContract() {
+    const existingId = contractForm.id;
+    const nextContract = {
+      ...contractBlank,
+      ...contractForm,
+      id: existingId || makeId("contract"),
+    };
+
+    setStore((current) => ({
+      ...current,
+      clients: current.clients.map((client) =>
+        client.id === nextContract.clientId
+          ? { ...client, clientType: "AMC Client" }
+          : client
+      ),
+      contracts: existingId
+        ? current.contracts.map((contract) =>
+            contract.id === existingId ? nextContract : contract
+          )
+        : [nextContract, ...current.contracts],
+    }));
+    setContractForm(contractBlank);
+    setFormMode("create");
+    setFormOpen(false);
+  }
+
   function resetAllData() {
     setStore(initialStore);
     window.localStorage.setItem(storageKey, JSON.stringify(initialStore));
@@ -751,6 +963,177 @@ export default function AmcOperationsApp() {
         key === "plans"
           ? current.planRules.filter((rule) => rule.name !== value)
           : current.planRules,
+    }));
+  }
+
+  function addLocationArea(value: string) {
+    const cleanValue = value.trim();
+    if (!cleanValue) return;
+
+    setStore((current) => {
+      if (
+        current.locationAreas.some(
+          (area) => area.name.toLowerCase() === cleanValue.toLowerCase()
+        )
+      ) {
+        return current;
+      }
+
+      const locationAreas = [
+        ...current.locationAreas,
+        { name: cleanValue, communities: [] },
+      ].sort((a, b) => a.name.localeCompare(b.name));
+
+      return {
+        ...current,
+        locationAreas,
+        areas: uniqueSorted(locationAreas.map((area) => area.name)),
+      };
+    });
+    setSelectedSettingsArea(cleanValue);
+    setSelectedSettingsCommunity("");
+    setAreaInput("");
+  }
+
+  function addLocationCommunity(areaName: string, value: string) {
+    const cleanValue = value.trim();
+    if (!areaName || !cleanValue) return;
+
+    setStore((current) => {
+      const locationAreas = current.locationAreas.map((area) => {
+        if (area.name !== areaName) return area;
+        if (
+          area.communities.some(
+            (community) =>
+              community.name.toLowerCase() === cleanValue.toLowerCase()
+          )
+        ) {
+          return area;
+        }
+
+        return {
+          ...area,
+          communities: [
+            ...area.communities,
+            { name: cleanValue, phases: [] },
+          ].sort((a, b) => a.name.localeCompare(b.name)),
+        };
+      });
+
+      return {
+        ...current,
+        locationAreas,
+        communities: uniqueSorted(
+          locationAreas.flatMap((area) =>
+            area.communities.map((community) => community.name)
+          )
+        ),
+      };
+    });
+    setSelectedSettingsCommunity(cleanValue);
+    setCommunityInput("");
+  }
+
+  function addLocationPhase(
+    areaName: string,
+    communityName: string,
+    value: string
+  ) {
+    const cleanValue = value.trim();
+    if (!areaName || !communityName || !cleanValue) return;
+
+    setStore((current) => ({
+      ...current,
+      locationAreas: current.locationAreas.map((area) =>
+        area.name !== areaName
+          ? area
+          : {
+              ...area,
+              communities: area.communities.map((community) =>
+                community.name !== communityName
+                  ? community
+                  : {
+                      ...community,
+                      phases: uniqueSorted([...community.phases, cleanValue]),
+                    }
+              ),
+            }
+      ),
+    }));
+    setPhaseInput("");
+  }
+
+  function removeLocationArea(areaName: string) {
+    setStore((current) => {
+      const locationAreas = current.locationAreas.filter(
+        (area) => area.name !== areaName
+      );
+
+      return {
+        ...current,
+        locationAreas,
+        areas: uniqueSorted(locationAreas.map((area) => area.name)),
+        communities: uniqueSorted(
+          locationAreas.flatMap((area) =>
+            area.communities.map((community) => community.name)
+          )
+        ),
+      };
+    });
+    setSelectedSettingsArea("");
+    setSelectedSettingsCommunity("");
+  }
+
+  function removeLocationCommunity(areaName: string, communityName: string) {
+    setStore((current) => {
+      const locationAreas = current.locationAreas.map((area) =>
+        area.name !== areaName
+          ? area
+          : {
+              ...area,
+              communities: area.communities.filter(
+                (community) => community.name !== communityName
+              ),
+            }
+      );
+
+      return {
+        ...current,
+        locationAreas,
+        communities: uniqueSorted(
+          locationAreas.flatMap((area) =>
+            area.communities.map((community) => community.name)
+          )
+        ),
+      };
+    });
+    setSelectedSettingsCommunity("");
+  }
+
+  function removeLocationPhase(
+    areaName: string,
+    communityName: string,
+    phaseName: string
+  ) {
+    setStore((current) => ({
+      ...current,
+      locationAreas: current.locationAreas.map((area) =>
+        area.name !== areaName
+          ? area
+          : {
+              ...area,
+              communities: area.communities.map((community) =>
+                community.name !== communityName
+                  ? community
+                  : {
+                      ...community,
+                      phases: community.phases.filter(
+                        (phase) => phase !== phaseName
+                      ),
+                    }
+              ),
+            }
+      ),
     }));
   }
 
@@ -972,6 +1355,24 @@ export default function AmcOperationsApp() {
                   setFormOpen(true);
                 }}
                 onClose={() => setFormOpen(false)}
+                recordHeaderActions={
+                  <div className="flex flex-wrap gap-2">
+                    {(["All", ...clientTypes] as ("All" | ClientType)[]).map((type) => (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => setClientTypeFilter(type)}
+                        className={`rounded-md px-3 py-2 text-xs font-black transition ${
+                          clientTypeFilter === type
+                            ? "bg-white text-slate-950"
+                            : "bg-white/15 text-white hover:bg-white/25"
+                        }`}
+                      >
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+                }
                 form={
                   <form
                     className="grid gap-4 lg:grid-cols-3"
@@ -981,6 +1382,7 @@ export default function AmcOperationsApp() {
                     }}
                   >
                     <TextInput label="Client name" value={clientForm.name} onChange={(name) => setClientForm({ ...clientForm, name })} required />
+                    <SelectInput label="Client type" value={clientForm.clientType} onChange={(clientType) => setClientForm({ ...clientForm, clientType: clientType as ClientType })} options={clientTypes.map((value) => [value, value])} required />
                     <TextInput label="Phone" value={clientForm.phone} onChange={(phone) => setClientForm({ ...clientForm, phone })} />
                     <TextInput label="WhatsApp" value={clientForm.whatsapp} onChange={(whatsapp) => setClientForm({ ...clientForm, whatsapp })} />
                     <TextInput label="Email" value={clientForm.email} onChange={(email) => setClientForm({ ...clientForm, email })} />
@@ -991,23 +1393,40 @@ export default function AmcOperationsApp() {
                 }
               >
                 <DataTable
-                  headers={["Name", "Phone", "WhatsApp", "Email", "Company", "Notes", "Actions"]}
+                  headers={["Name", "Type", "Properties", "Phone", "WhatsApp", "Email", "Company", "Notes", "Actions"]}
                   rows={store.clients
+                    .filter((client) => clientTypeFilter === "All" || client.clientType === clientTypeFilter)
                     .filter((client) => matchesSearch(search, client))
-                    .map((client) => [
-                      client.name,
-                      client.phone,
-                      client.whatsapp,
-                      client.email,
-                      client.company || "-",
-                      client.notes || "-",
-                      <RowActions
-                        key={client.id}
-                        onView={() => setSelectedClientId(client.id)}
-                        onEdit={() => { setClientForm(client); setFormMode("edit"); setFormOpen(true); }}
-                        onDelete={() => remove("clients", client.id)}
-                      />,
-                    ])}
+                    .map((client) => {
+                      const propertyCount = store.properties.filter(
+                        (property) => property.clientId === client.id
+                      ).length;
+
+                      return [
+                        client.name,
+                        <StatusPill key={`${client.id}-type`} label={client.clientType} tone={clientTypeTone(client.clientType)} />,
+                        <StatusPill
+                          key={`${client.id}-properties`}
+                          label={propertyCount ? `${propertyCount} properties` : "No property"}
+                          tone={
+                            propertyCount
+                              ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                              : "bg-red-50 text-red-700 ring-red-200"
+                          }
+                        />,
+                        client.phone,
+                        client.whatsapp,
+                        client.email,
+                        client.company || "-",
+                        client.notes || "-",
+                        <RowActions
+                          key={client.id}
+                          onView={() => setSelectedClientId(client.id)}
+                          onEdit={() => { setClientForm(client); setFormMode("edit"); setFormOpen(true); }}
+                          onDelete={() => remove("clients", client.id)}
+                        />,
+                      ];
+                    })}
                 />
               </ModulePanel>
             )}
@@ -1030,8 +1449,11 @@ export default function AmcOperationsApp() {
                     <SelectInput label="Client" value={propertyForm.clientId} onChange={(clientId) => setPropertyForm({ ...propertyForm, clientId })} options={store.clients.map((client) => [client.id, client.name])} required />
                     <TextInput label="Property title" value={propertyForm.title} onChange={(title) => setPropertyForm({ ...propertyForm, title })} required />
                     <TextInput label="Villa / building number" value={propertyForm.villaNumber} onChange={(villaNumber) => setPropertyForm({ ...propertyForm, villaNumber })} />
-                    <SearchableListInput label="Community" value={propertyForm.community} onChange={(community) => setPropertyForm({ ...propertyForm, community })} options={store.communities} />
-                    <SearchableListInput label="Area" value={propertyForm.area} onChange={(area) => setPropertyForm({ ...propertyForm, area })} options={store.areas} />
+                    <SearchableListInput label="Area" value={propertyForm.area} onChange={(area) => setPropertyForm({ ...propertyForm, area, community: "", phase: "" })} options={store.locationAreas.map((area) => area.name)} />
+                    <SearchableListInput label="Community" value={propertyForm.community} onChange={(community) => setPropertyForm({ ...propertyForm, community, phase: "" })} options={communitiesForArea(propertyForm.area).map((community) => community.name)} />
+                    <SearchableListInput label="Phase" value={propertyForm.phase || ""} onChange={(phase) => setPropertyForm({ ...propertyForm, phase })} options={phasesForCommunity(propertyForm.area, propertyForm.community)} />
+                    <NumberInput label="Number of rooms" value={propertyForm.rooms || 0} onChange={(rooms) => setPropertyForm({ ...propertyForm, rooms })} />
+                    <NumberInput label="Number of AC units" value={propertyForm.acUnits || 0} onChange={(acUnits) => setPropertyForm({ ...propertyForm, acUnits })} />
                     <TextInput label="Google Maps link" value={propertyForm.mapLink} onChange={(mapLink) => setPropertyForm({ ...propertyForm, mapLink })} />
                     <TextArea label="Access notes" value={propertyForm.accessNotes} onChange={(accessNotes) => setPropertyForm({ ...propertyForm, accessNotes })} />
                     <TextArea label="Parking notes" value={propertyForm.parkingNotes} onChange={(parkingNotes) => setPropertyForm({ ...propertyForm, parkingNotes })} />
@@ -1041,12 +1463,15 @@ export default function AmcOperationsApp() {
                 }
               >
                 <DataTable
-                  headers={["Property", "Client", "Community", "Area", "Access", "Actions"]}
+                  headers={["Property", "Client", "Area", "Community", "Phase", "Rooms", "AC Units", "Access", "Actions"]}
                   rows={store.properties.filter((property) => matchesSearch(search, property)).map((property) => [
                     property.title,
                     clientName(property.clientId),
-                    property.community,
                     property.area,
+                    property.community,
+                    property.phase || "-",
+                    property.rooms || 0,
+                    property.acUnits || 0,
                     property.accessNotes || "-",
                     <RowActions key={property.id} onEdit={() => { setPropertyForm(property); setFormMode("edit"); setFormOpen(true); }} onDelete={() => remove("properties", property.id)} />,
                   ])}
@@ -1068,7 +1493,7 @@ export default function AmcOperationsApp() {
                 }}
                 onClose={() => setFormOpen(false)}
                 form={
-                  <form className="grid gap-4 lg:grid-cols-3" onSubmit={(event) => { event.preventDefault(); upsert("contracts", contractForm, contractBlank, "contract", setContractForm); }}>
+                  <form className="grid gap-4 lg:grid-cols-3" onSubmit={(event) => { event.preventDefault(); saveContract(); }}>
                     <SelectInput label="Client" value={contractForm.clientId} onChange={(clientId) => setContractForm({ ...contractForm, clientId, propertyId: "" })} options={store.clients.map((client) => [client.id, client.name])} required />
                     <SelectInput label="Property" value={contractForm.propertyId} onChange={(propertyId) => setContractForm({ ...contractForm, propertyId })} options={propertyOptionsForClient(contractForm.clientId)} required />
                     <SelectInput label="AMC plan" value={contractForm.plan || "Silver"} onChange={(plan) => {
@@ -1362,25 +1787,36 @@ export default function AmcOperationsApp() {
 
             {active === "settings" && (
                 <SettingsPanel
-                communities={store.communities}
-                areas={store.areas}
+                locationAreas={store.locationAreas}
                 plans={store.plans}
                 planRules={store.planRules}
                 crmSettings={store.crmSettings}
                 communityInput={communityInput}
                 areaInput={areaInput}
+                phaseInput={phaseInput}
+                selectedArea={selectedSettingsArea}
+                selectedCommunity={selectedSettingsCommunity}
                 planInput={planInput}
                 communitySearch={communitySearch}
                 areaSearch={areaSearch}
                 planSearch={planSearch}
                 setCommunityInput={setCommunityInput}
                 setAreaInput={setAreaInput}
+                setPhaseInput={setPhaseInput}
+                setSelectedArea={setSelectedSettingsArea}
+                setSelectedCommunity={setSelectedSettingsCommunity}
                 setPlanInput={setPlanInput}
                 setCommunitySearch={setCommunitySearch}
                 setAreaSearch={setAreaSearch}
                 setPlanSearch={setPlanSearch}
                   onAdd={addSettingListItem}
                 onRemove={removeSettingListItem}
+                onAddArea={addLocationArea}
+                onAddCommunity={addLocationCommunity}
+                onAddPhase={addLocationPhase}
+                onRemoveArea={removeLocationArea}
+                onRemoveCommunity={removeLocationCommunity}
+                onRemovePhase={removeLocationPhase}
                 onUpdatePlanRule={updatePlanRule}
                 onUpdateCrmSettings={updateCrmSettings}
               />
@@ -1434,6 +1870,27 @@ function Dashboard({
       helper: "Running AMC agreements",
       icon: ShieldCheck,
       tone: "bg-emerald-50 text-emerald-600 ring-emerald-100",
+    },
+    {
+      label: "AMC Clients",
+      value: stats.amcClients,
+      helper: "Customers with AMC relationship",
+      icon: Users,
+      tone: "bg-emerald-50 text-emerald-600 ring-emerald-100",
+    },
+    {
+      label: "Walk-in Clients",
+      value: stats.walkInClients,
+      helper: "One-time service customers",
+      icon: UserRoundCheck,
+      tone: "bg-blue-50 text-blue-600 ring-blue-100",
+    },
+    {
+      label: "Sales Leads",
+      value: stats.leads,
+      helper: "Needs quotation or follow-up",
+      icon: ClipboardList,
+      tone: "bg-amber-50 text-amber-600 ring-amber-100",
     },
     {
       label: "Expiring AMC Contracts",
@@ -1862,41 +2319,57 @@ function RenovationPanel({
 }
 
 function SettingsPanel({
-  communities,
-  areas,
+  locationAreas,
   plans,
   planRules,
   crmSettings,
   communityInput,
   areaInput,
+  phaseInput,
+  selectedArea,
+  selectedCommunity,
   planInput,
   communitySearch,
   areaSearch,
   planSearch,
   setCommunityInput,
   setAreaInput,
+  setPhaseInput,
+  setSelectedArea,
+  setSelectedCommunity,
   setPlanInput,
   setCommunitySearch,
   setAreaSearch,
   setPlanSearch,
   onAdd,
   onRemove,
+  onAddArea,
+  onAddCommunity,
+  onAddPhase,
+  onRemoveArea,
+  onRemoveCommunity,
+  onRemovePhase,
   onUpdatePlanRule,
   onUpdateCrmSettings,
 }: {
-  communities: string[];
-  areas: string[];
+  locationAreas: LocationArea[];
   plans: string[];
   planRules: PlanRule[];
   crmSettings: CrmSettings;
   communityInput: string;
   areaInput: string;
+  phaseInput: string;
+  selectedArea: string;
+  selectedCommunity: string;
   planInput: string;
   communitySearch: string;
   areaSearch: string;
   planSearch: string;
   setCommunityInput: (value: string) => void;
   setAreaInput: (value: string) => void;
+  setPhaseInput: (value: string) => void;
+  setSelectedArea: (value: string) => void;
+  setSelectedCommunity: (value: string) => void;
   setPlanInput: (value: string) => void;
   setCommunitySearch: (value: string) => void;
   setAreaSearch: (value: string) => void;
@@ -1907,12 +2380,37 @@ function SettingsPanel({
     reset: (value: string) => void
   ) => void;
   onRemove: (key: "communities" | "areas" | "plans", value: string) => void;
+  onAddArea: (value: string) => void;
+  onAddCommunity: (areaName: string, value: string) => void;
+  onAddPhase: (areaName: string, communityName: string, value: string) => void;
+  onRemoveArea: (areaName: string) => void;
+  onRemoveCommunity: (areaName: string, communityName: string) => void;
+  onRemovePhase: (
+    areaName: string,
+    communityName: string,
+    phaseName: string
+  ) => void;
   onUpdatePlanRule: (planName: string, updates: Partial<PlanRule>) => void;
   onUpdateCrmSettings: <Section extends keyof CrmSettings>(
     section: Section,
     updates: Partial<CrmSettings[Section]>
   ) => void;
 }) {
+  const selectedAreaRecord =
+    locationAreas.find((area) => area.name === selectedArea) ||
+    locationAreas[0];
+  const selectedCommunityRecord =
+    selectedAreaRecord?.communities.find(
+      (community) => community.name === selectedCommunity
+    ) || selectedAreaRecord?.communities[0];
+  const filteredAreas = locationAreas.filter((area) =>
+    area.name.toLowerCase().includes(areaSearch.trim().toLowerCase())
+  );
+  const filteredCommunities = (selectedAreaRecord?.communities || []).filter(
+    (community) =>
+      community.name.toLowerCase().includes(communitySearch.trim().toLowerCase())
+  );
+
   return (
     <section className="grid gap-6">
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -1926,8 +2424,7 @@ function SettingsPanel({
             </p>
             <h2 className="mt-2 text-2xl font-black">Settings</h2>
             <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-500">
-              Manage reusable communities, Dubai areas, and AMC plans used in
-              property and contract forms.
+              Manage Dubai property hierarchy as Area, Community, and Phase, then reuse it in property records.
             </p>
           </div>
         </div>
@@ -1993,31 +2490,82 @@ function SettingsPanel({
         </SettingsCard>
       </div>
 
+      <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className={`flex items-center gap-3 rounded-t-lg px-5 py-4 ${sectionHeaderTone}`}>
+          <span className={`grid h-9 w-9 place-items-center rounded-md ${sectionIconTone}`}>
+            <MapPin className="h-5 w-5" />
+          </span>
+          <div>
+            <h3 className="font-black">Area, Community & Phase Settings</h3>
+            <p className="mt-1 text-xs font-bold text-white/80">
+              Click an area to see its communities, then click a community to see its phases.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-5 p-5 xl:grid-cols-3">
+          <LocationColumn
+            title="Areas"
+            value={areaInput}
+            search={areaSearch}
+            items={filteredAreas.map((area) => area.name)}
+            selected={selectedAreaRecord?.name || ""}
+            placeholder="Add area, e.g. Wadi Al Safa 5"
+            onChange={setAreaInput}
+            onSearch={setAreaSearch}
+            onAdd={() => onAddArea(areaInput)}
+            onSelect={(areaName) => {
+              const nextArea = locationAreas.find((area) => area.name === areaName);
+              setSelectedArea(areaName);
+              setSelectedCommunity(nextArea?.communities[0]?.name || "");
+            }}
+            onRemove={onRemoveArea}
+          />
+          <LocationColumn
+            title={`${selectedAreaRecord?.name || "Area"} Communities`}
+            value={communityInput}
+            search={communitySearch}
+            items={filteredCommunities.map((community) => community.name)}
+            selected={selectedCommunityRecord?.name || ""}
+            placeholder="Add community, e.g. Villanova"
+            onChange={setCommunityInput}
+            onSearch={setCommunitySearch}
+            onAdd={() => onAddCommunity(selectedAreaRecord?.name || "", communityInput)}
+            onSelect={setSelectedCommunity}
+            onRemove={(communityName) => onRemoveCommunity(selectedAreaRecord?.name || "", communityName)}
+            disabled={!selectedAreaRecord}
+          />
+          <LocationColumn
+            title={`${selectedCommunityRecord?.name || "Community"} Phases`}
+            value={phaseInput}
+            search=""
+            items={selectedCommunityRecord?.phases || []}
+            selected=""
+            placeholder="Add phase, e.g. La Rosa 1"
+            onChange={setPhaseInput}
+            onSearch={() => undefined}
+            onAdd={() =>
+              onAddPhase(
+                selectedAreaRecord?.name || "",
+                selectedCommunityRecord?.name || "",
+                phaseInput
+              )
+            }
+            onSelect={() => undefined}
+            onRemove={(phaseName) =>
+              onRemovePhase(
+                selectedAreaRecord?.name || "",
+                selectedCommunityRecord?.name || "",
+                phaseName
+              )
+            }
+            disabled={!selectedCommunityRecord}
+            hideSearch
+          />
+        </div>
+      </section>
+
       <div className="grid gap-6 xl:grid-cols-3">
-        <SettingsList
-          title="Communities"
-          icon={Building2}
-          value={communityInput}
-          search={communitySearch}
-          items={communities}
-          placeholder="Add community, e.g. Mira"
-          onChange={setCommunityInput}
-          onSearch={setCommunitySearch}
-          onAdd={() => onAdd("communities", communityInput, setCommunityInput)}
-          onRemove={(value) => onRemove("communities", value)}
-        />
-        <SettingsList
-          title="Areas"
-          icon={MapPin}
-          value={areaInput}
-          search={areaSearch}
-          items={areas}
-          placeholder="Add area, e.g. Dubai Marina"
-          onChange={setAreaInput}
-          onSearch={setAreaSearch}
-          onAdd={() => onAdd("areas", areaInput, setAreaInput)}
-          onRemove={(value) => onRemove("areas", value)}
-        />
         <SettingsList
           title="AMC Plans"
           icon={ShieldCheck}
@@ -2165,6 +2713,108 @@ function SettingsList({
   );
 }
 
+function LocationColumn({
+  title,
+  value,
+  search,
+  items,
+  selected,
+  placeholder,
+  disabled,
+  hideSearch,
+  onChange,
+  onSearch,
+  onAdd,
+  onSelect,
+  onRemove,
+}: {
+  title: string;
+  value: string;
+  search: string;
+  items: string[];
+  selected: string;
+  placeholder: string;
+  disabled?: boolean;
+  hideSearch?: boolean;
+  onChange: (value: string) => void;
+  onSearch: (value: string) => void;
+  onAdd: () => void;
+  onSelect: (value: string) => void;
+  onRemove: (value: string) => void;
+}) {
+  return (
+    <article className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <h4 className="font-black text-slate-900">{title}</h4>
+      <div className="mt-4 flex gap-2">
+        <input
+          value={value}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          className="min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-100 disabled:bg-slate-100"
+        />
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={onAdd}
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-red-500 text-white transition hover:bg-red-600 disabled:bg-slate-300"
+          aria-label={`Add ${title}`}
+          title={`Add ${title}`}
+        >
+          <Plus className="h-4 w-4" />
+        </button>
+      </div>
+      {!hideSearch && (
+        <div className="mt-3 flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2">
+          <Search className="h-4 w-4 text-slate-400" />
+          <input
+            value={search}
+            disabled={disabled}
+            onChange={(event) => onSearch(event.target.value)}
+            placeholder={`Search ${title.toLowerCase()}`}
+            className="w-full bg-transparent text-sm font-semibold outline-none disabled:bg-slate-100"
+          />
+        </div>
+      )}
+      <div className="mt-4 max-h-72 space-y-2 overflow-y-auto pr-1">
+        {items.length === 0 ? (
+          <div className="rounded-md border border-dashed border-slate-200 bg-white px-3 py-4 text-sm font-bold text-slate-500">
+            No records found.
+          </div>
+        ) : (
+          items.map((item) => (
+            <div
+              key={item}
+              className={`flex items-center justify-between gap-2 rounded-md border px-3 py-2 ${
+                selected === item
+                  ? "border-red-200 bg-red-50 text-red-700"
+                  : "border-slate-200 bg-white text-slate-700"
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => onSelect(item)}
+                className="min-w-0 flex-1 truncate text-left text-sm font-black"
+              >
+                {item}
+              </button>
+              <button
+                type="button"
+                onClick={() => onRemove(item)}
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-red-100 hover:text-red-600"
+                aria-label={`Remove ${item}`}
+                title={`Remove ${item}`}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+    </article>
+  );
+}
+
 function SettingsCard({
   title,
   icon: Icon,
@@ -2234,7 +2884,10 @@ function ClientProfileModal({
             <p className="text-xs font-black uppercase tracking-[0.18em] text-red-500">
               Client Profile
             </p>
-            <h3 className="mt-1 text-2xl font-black">{client.name}</h3>
+            <div className="mt-1 flex flex-wrap items-center gap-3">
+              <h3 className="text-2xl font-black">{client.name}</h3>
+              <StatusPill label={client.clientType} tone={clientTypeTone(client.clientType)} />
+            </div>
             <p className="mt-2 text-sm font-semibold text-slate-500">
               {client.phone || "No phone"} / {client.email || "No email"}
             </p>
@@ -2262,12 +2915,15 @@ function ClientProfileModal({
           <div className="mt-6 grid gap-6">
             <ProfileSection title="Linked Properties">
               <DataTable
-                headers={["Property", "Villa / Building", "Community", "Area", "Access Notes", "Gate Access"]}
+                headers={["Property", "Villa / Building", "Area", "Community", "Phase", "Rooms", "AC Units", "Access Notes", "Gate Access"]}
                 rows={properties.map((property) => [
                   property.title,
                   property.villaNumber || "-",
-                  property.community || "-",
                   property.area || "-",
+                  property.community || "-",
+                  property.phase || "-",
+                  property.rooms || 0,
+                  property.acUnits || 0,
                   property.accessNotes || "-",
                   property.gateAccess || "-",
                 ])}
@@ -2378,6 +3034,7 @@ function ModulePanel({
   formMode,
   onAdd,
   onClose,
+  recordHeaderActions,
   form,
   children,
 }: {
@@ -2388,6 +3045,7 @@ function ModulePanel({
   formMode: FormMode;
   onAdd: () => void;
   onClose: () => void;
+  recordHeaderActions?: React.ReactNode;
   form: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -2423,13 +3081,14 @@ function ModulePanel({
       </div>
 
       <div className="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className={`rounded-t-lg px-5 py-4 ${sectionHeaderTone}`}>
+        <div className={`flex flex-col gap-3 rounded-t-lg px-5 py-4 md:flex-row md:items-center md:justify-between ${sectionHeaderTone}`}>
           <h2 className="flex items-center gap-2 font-black">
             <span className={`grid h-8 w-8 place-items-center rounded-md ${sectionIconTone}`}>
               <Icon className="h-4 w-4" />
             </span>
             {title} Records
           </h2>
+          {recordHeaderActions}
         </div>
         {children}
       </div>
@@ -2917,7 +3576,7 @@ function ReportCard({
 function StatusPill({ label, tone }: { label: string; tone: string }) {
   return (
     <span
-      className={`inline-flex rounded-full px-3 py-1 text-xs font-black ring-1 ${tone}`}
+      className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-xs font-black ring-1 ${tone}`}
     >
       {label}
     </span>
