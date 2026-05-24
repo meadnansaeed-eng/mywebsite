@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Banknote,
@@ -2555,7 +2555,7 @@ function PpmPanel({
         icon={CalendarClock}
         tone="blue"
         customContent={
-          <PpmChecklistTable
+          <PpmBoard
             rows={groupedRows.filter((row) => row.dueSoonCount > 0)}
             expandedContracts={expandedContracts}
             onToggle={toggleContract}
@@ -2571,7 +2571,7 @@ function PpmPanel({
         icon={AlertTriangle}
         tone="red"
         customContent={
-          <PpmChecklistTable
+          <PpmBoard
             rows={groupedRows.filter((row) => row.overdueCount > 0)}
             expandedContracts={expandedContracts}
             onToggle={toggleContract}
@@ -2586,7 +2586,7 @@ function PpmPanel({
         title="All PPM Checklists"
         icon={ClipboardCheck}
         customContent={
-          <PpmChecklistTable
+          <PpmBoard
             rows={groupedRows}
             expandedContracts={expandedContracts}
             onToggle={toggleContract}
@@ -2600,7 +2600,7 @@ function PpmPanel({
   );
 }
 
-function PpmChecklistTable({
+function PpmBoard({
   rows,
   expandedContracts,
   onToggle,
@@ -2622,33 +2622,13 @@ function PpmChecklistTable({
   mode?: "all" | "due" | "overdue";
 }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[920px] text-left text-sm">
-        <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-          <tr>
-            {[
-              "",
-              "Client",
-              "Property",
-              "Plan",
-              "Services",
-              "Next Due",
-              "PPM Status",
-            ].map((header) => (
-              <th key={header || "expand"} className="px-5 py-3">
-                {header}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {rows.length === 0 ? (
-            <tr>
-              <td className="px-5 py-8 text-center font-bold text-slate-500" colSpan={7}>
-                No PPM records found.
-              </td>
-            </tr>
-          ) : rows.map((row) => {
+    <div className="grid gap-4 p-5">
+      {rows.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center font-bold text-slate-500">
+          No PPM records found.
+        </div>
+      ) : (
+        rows.map((row) => {
             const expanded = expandedContracts.includes(row.contract.id);
             const visibleServices =
               mode === "due"
@@ -2674,98 +2654,110 @@ function PpmChecklistTable({
               : row.dueSoonCount
                 ? "bg-blue-50 text-blue-700 ring-blue-200"
                 : "bg-emerald-50 text-emerald-700 ring-emerald-200";
+            const headlineService = visibleServices[0] || row.nextService;
 
             return (
-              <Fragment key={row.contract.id}>
-                <tr>
-                  <td className="px-5 py-4 align-top">
+              <article
+                key={row.contract.id}
+                className="rounded-lg border border-slate-200 bg-white shadow-sm"
+              >
+                <div className="grid gap-4 border-b border-slate-100 p-5 xl:grid-cols-[1.2fr_1fr_auto] xl:items-center">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-lg font-black text-slate-950">
+                        {clientName(row.contract.clientId)}
+                      </h3>
+                      <StatusPill label={row.contract.plan || "AMC"} tone="bg-slate-100 text-slate-700 ring-slate-200" />
+                    </div>
+                    <p className="mt-2 text-sm font-bold text-slate-500">
+                      {propertyName(row.contract.propertyId)}
+                    </p>
+                  </div>
+
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="rounded-md bg-slate-50 px-4 py-3">
+                      <p className="text-xs font-black uppercase text-slate-400">
+                        Next Required Service
+                      </p>
+                      <p className="mt-1 font-black text-slate-900">
+                        {headlineService?.label || "-"}
+                      </p>
+                    </div>
+                    <div className="rounded-md bg-slate-50 px-4 py-3">
+                      <p className="text-xs font-black uppercase text-slate-400">
+                        Next Due Date
+                      </p>
+                      <p className="mt-1 font-black text-slate-900">
+                        {headlineService?.dueDate || "-"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3 xl:justify-end">
+                    <StatusPill label={statusLabel} tone={statusTone} />
                     <button
                       type="button"
                       onClick={() => onToggle(row.contract.id)}
-                      className="grid h-9 w-9 place-items-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
+                      className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-black text-slate-700 transition hover:bg-slate-50"
                       aria-label={expanded ? "Collapse PPM services" : "Expand PPM services"}
                       title={expanded ? "Collapse" : "Expand"}
                     >
+                      {expanded ? "Hide" : "Details"}
                       <ChevronDown
                         className={`h-4 w-4 transition ${expanded ? "rotate-180" : ""}`}
                       />
                     </button>
-                  </td>
-                  <td className="px-5 py-4 align-top font-semibold text-slate-700">
-                    {clientName(row.contract.clientId)}
-                  </td>
-                  <td className="px-5 py-4 align-top font-semibold text-slate-700">
-                    {propertyName(row.contract.propertyId)}
-                  </td>
-                  <td className="px-5 py-4 align-top font-semibold text-slate-700">
-                    {row.contract.plan}
-                  </td>
-                  <td className="px-5 py-4 align-top font-semibold text-slate-700">
-                    <div className="flex flex-wrap gap-2">
-                      {visibleServices.map((service) => (
-                        <StatusPill
-                          key={`${row.contract.id}-${service.service}-${mode}`}
-                          label={`${service.label}: ${service.status.label}`}
-                          tone={service.status.tone}
-                        />
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-5 py-4 align-top font-semibold text-slate-700">
-                    {row.nextService?.dueDate || "-"}
-                  </td>
-                  <td className="px-5 py-4 align-top">
-                    <StatusPill label={statusLabel} tone={statusTone} />
-                  </td>
-                </tr>
-                {expanded && (
-                  <tr>
-                    <td className="bg-slate-50 px-5 py-4" colSpan={7}>
-                      <div className="grid gap-3 lg:grid-cols-2">
-                        {row.services.map((service) => (
-                          <div
-                            key={`${row.contract.id}-${service.service}`}
-                            className="rounded-md border border-slate-200 bg-white p-4"
-                          >
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                              <div>
-                                <h4 className="font-black text-slate-900">
-                                  {service.label}
-                                </h4>
-                                <p className="mt-1 text-xs font-bold text-slate-500">
-                                  {service.visits} visits / year
-                                </p>
-                              </div>
-                              <StatusPill
-                                label={service.status.label}
-                                tone={service.status.tone}
-                              />
+                  </div>
+                </div>
+
+                <div className="grid gap-3 p-5 md:grid-cols-2 xl:grid-cols-4">
+                  {row.services.map((service) => {
+                    const isFocus = visibleServices.some(
+                      (item) => item.service === service.service
+                    );
+                    return (
+                      <div
+                        key={`${row.contract.id}-${service.service}`}
+                        className={`rounded-lg border p-4 ${
+                          isFocus
+                            ? "border-red-200 bg-red-50/50"
+                            : "border-slate-200 bg-slate-50"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-black text-slate-950">
+                              {service.label}
+                            </p>
+                            <p className="mt-1 text-xs font-bold text-slate-500">
+                              {service.visits} visits / year
+                            </p>
+                          </div>
+                          <StatusPill
+                            label={service.status.label}
+                            tone={service.status.tone}
+                          />
+                        </div>
+                        {expanded && (
+                          <div className="mt-4 grid gap-2 text-sm font-semibold text-slate-600">
+                            <div className="flex justify-between gap-4">
+                              <span className="text-slate-400">Last</span>
+                              <span>{service.lastDate || "-"}</span>
                             </div>
-                            <div className="mt-4 grid gap-3 text-sm font-semibold text-slate-600 sm:grid-cols-2">
-                              <div>
-                                <span className="block text-xs font-black uppercase text-slate-400">
-                                  Last Service
-                                </span>
-                                {service.lastDate || "-"}
-                              </div>
-                              <div>
-                                <span className="block text-xs font-black uppercase text-slate-400">
-                                  Next Due
-                                </span>
-                                {service.dueDate || "-"}
-                              </div>
+                            <div className="flex justify-between gap-4">
+                              <span className="text-slate-400">Next</span>
+                              <span>{service.dueDate || "-"}</span>
                             </div>
                           </div>
-                        ))}
+                        )}
                       </div>
-                    </td>
-                  </tr>
-                )}
-              </Fragment>
+                    );
+                  })}
+                </div>
+              </article>
             );
-          })}
-        </tbody>
-      </table>
+          })
+      )}
     </div>
   );
 }
