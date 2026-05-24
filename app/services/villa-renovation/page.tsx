@@ -1,5 +1,6 @@
 import CTA from "@/components/CTA";
 import { phoneHref, whatsappHref } from "@/lib/siteData";
+import FAQAccordion from "@/components/FAQAccordion";
 
 const renovationReasons = [
   "Improve the functionality and flow of your living space",
@@ -353,14 +354,7 @@ export default function VillaRenovationPage() {
             Frequently Asked Questions
           </h2>
 
-          <div className="mt-8 grid gap-4">
-            {faqs.map((faq) => (
-              <div key={faq.question} className="rounded-lg border bg-white p-6 shadow-lg">
-                <h3 className="text-xl font-black">{faq.question}</h3>
-                <p className="mt-3 leading-7 text-slate-600">{faq.answer}</p>
-              </div>
-            ))}
-          </div>
+          <FAQAccordion faqs={faqs} />
         </div>
       </section>
 

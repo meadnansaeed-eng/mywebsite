@@ -23,70 +23,118 @@ export type Service = {
 
 export const services: Service[] = [
   {
-  title: "Villa Renovation",
-  slug: "villa-renovation",
-  image: "/assets/services/villa-renovation.png",
-  icon: "H",
-  text: "Complete villa upgrades, layout improvements, finishing, flooring, ceiling, carpentry and civil works.",
-  heroText:
-    "Complete villa renovation solutions in Dubai, from layout improvements and civil works to premium finishing and clean handover.",
-  introTitle: "Transform Your Villa With a Clear Renovation Plan",
-  introText:    "Villa renovation needs careful planning, trade coordination and proper finishing. Our team helps homeowners upgrade interiors, improve layouts, refresh walls and ceilings, repair surfaces, support flooring works and complete the project with a clean, reliable handover.",
-
-  gallery: [
-  "/assets/services/villa-renovation.png",
-  "/assets/services/interior-painting.png",
-  "/assets/services/plumbing-works.png",
-  "/assets/services/pergola-garage-roof.png",
-],
-
-  includes: [
-    "Villa layout improvement and minor civil works",
-    "Wall, ceiling and surface preparation",
-    "Interior painting and decorative finishing",
-    "Flooring, skirting and tile work support",
-    "Carpentry, doors and minor repair work",
-    "Kitchen and bathroom upgrade coordination",
-    "Final inspection, cleaning and handover",
-  ],
-  benefits: [
-    "Creates a more modern and comfortable living space",
-    "Improves property appearance and long-term value",
-    "Combines multiple renovation trades under one scope",
-    "Reduces stress with clearer planning and coordination",
-    "Supports both partial upgrades and full villa renovation",
-  ],
-  process: [
-    "Visit the villa and understand renovation goals",
-    "Prepare scope of work, timeline and quotation",
-    "Confirm materials, finishes and work sequence",
-    "Execute renovation with supervision and progress updates",
-    "Inspect, clean and hand over the completed work",
-  ],
-  faqs: [
-    {
-      question: "Can you renovate a complete villa?",
-      answer:
-        "Yes, we can handle complete villa renovation scopes including civil works, surface preparation, painting, flooring support, ceilings, carpentry coordination and finishing.",
-    },
-    {
-      question: "Can you do partial villa renovation?",
-      answer:
-        "Yes, we also handle partial upgrades such as repainting, room renovation, bathroom and kitchen improvements, flooring support and repair works.",
-    },
-    {
-      question: "Do you help with material selection?",
-      answer:
-        "Yes, we can guide material selection based on the required finish, durability, budget and the existing style of the villa.",
-    },
-    {
-      question: "Do you provide a clear quotation before starting?",
-      answer:
-        "Yes, we inspect the site and provide a clear quotation with the agreed scope before starting the work.",
-    },
-  ],
-},
-
+    title: "Villa Renovation",
+    slug: "villa-renovation",
+    image: "/assets/services/villa-renovation.png",
+    icon: "H",
+    text: "Complete villa upgrades, layout improvements, finishing, flooring, ceiling, carpentry and civil works.",
+    heroText:
+      "Complete villa renovation solutions in Dubai, from layout improvements and civil works to premium finishing and clean handover.",
+    introTitle: "Transform Your Villa With a Clear Renovation Plan",
+    introText:
+      "Villa renovation needs careful planning, trade coordination and proper finishing. Our team helps homeowners upgrade interiors, improve layouts, refresh walls and ceilings, repair surfaces, support flooring works and complete the project with a clean, reliable handover.",
+    gallery: [
+      "/assets/services/villa-renovation.png",
+      "/assets/services/interior-painting.png",
+      "/assets/services/plumbing-works.png",
+      "/assets/services/pergola-garage-roof.png",
+    ],
+    includes: [
+      "Villa layout improvement and minor civil works",
+      "Wall, ceiling and surface preparation",
+      "Interior painting and decorative finishing",
+      "Flooring, skirting and tile work support",
+      "Carpentry, doors and minor repair work",
+      "Kitchen and bathroom upgrade coordination",
+      "Final inspection, cleaning and handover",
+    ],
+    benefits: [
+      "Creates a more modern and comfortable living space",
+      "Improves property appearance and long-term value",
+      "Combines multiple renovation trades under one scope",
+      "Reduces stress with clearer planning and coordination",
+      "Supports both partial upgrades and full villa renovation",
+    ],
+    process: [
+      "Visit the villa and understand renovation goals",
+      "Prepare scope of work, timeline and quotation",
+      "Confirm materials, finishes and work sequence",
+      "Execute renovation with supervision and progress updates",
+      "Inspect, clean and hand over the completed work",
+    ],
+    faqs: [
+      {
+        question: "Can you renovate a complete villa?",
+        answer:
+          "Yes, we can handle complete villa renovation scopes including civil works, surface preparation, painting, flooring support, ceilings, carpentry coordination and finishing.",
+      },
+      {
+        question: "Can you do partial villa renovation?",
+        answer:
+          "Yes, we also handle partial upgrades such as repainting, room renovation, bathroom and kitchen improvements, flooring support and repair works.",
+      },
+      {
+        question: "Do you help with material selection?",
+        answer:
+          "Yes, we can guide material selection based on the required finish, durability, budget and the existing style of the villa.",
+      },
+      {
+        question: "Do you provide a clear quotation before starting?",
+        answer:
+          "Yes, we inspect the site and provide a clear quotation with the agreed scope before starting the work.",
+      },
+    ],
+  },
+  {
+    title: "Villa Extension",
+    slug: "villa-extension",
+    image: "/assets/services/villa-extension.png",
+    icon: "X",
+    text: "Room extensions, majlis expansion, outdoor area enclosure, structural coordination and finishing works for Dubai villas.",
+    heroText:
+      "Professional villa extension services in Dubai for room additions, majlis expansion, outdoor enclosures and practical living space upgrades.",
+    introTitle: "Add More Space Without Losing the Villa Character",
+    introText:
+      "Villa extension work requires careful planning, structural coordination and finishing that blends with the existing property. We help homeowners expand usable space while keeping the result clean, practical and visually consistent.",
+    gallery: [
+      "/assets/services/villa-extension.png",
+      "/assets/services/pergola-garage-roof.png",
+      "/assets/services/villa-renovation.png",
+      "/assets/services/electrical-works.png",
+    ],
+    includes: [
+      "Room extension and space planning support",
+      "Majlis, storage or outdoor area expansion",
+      "Wall, ceiling and finishing coordination",
+      "Electrical and plumbing coordination where required",
+      "Exterior touch-up and final finishing",
+    ],
+    benefits: [
+      "Creates additional usable living space",
+      "Improves villa functionality for growing families",
+      "Can increase property appeal and value",
+      "Keeps extension works under a clear scope",
+    ],
+    process: [
+      "Review the required extension area",
+      "Discuss feasibility, scope and finishing expectations",
+      "Coordinate civil, MEP and finishing requirements",
+      "Execute extension work with supervision",
+      "Inspect, clean and hand over the completed space",
+    ],
+    faqs: [
+      {
+        question: "Can you help with villa room extensions?",
+        answer:
+          "Yes, we support villa extension work such as room expansion, majlis extension, outdoor enclosure and finishing coordination.",
+      },
+      {
+        question: "Will the extension match the existing villa?",
+        answer:
+          "We aim to coordinate finishes, colors and materials so the new space feels consistent with the existing villa.",
+      },
+    ],
+  },
   {
     title: "Roof Waterproofing",
     slug: "roof-waterproofing",
