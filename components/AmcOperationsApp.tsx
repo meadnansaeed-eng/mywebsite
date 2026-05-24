@@ -2490,14 +2490,6 @@ function PpmPanel({
   propertyName: (id: string) => string;
 }) {
   const [expandedContracts, setExpandedContracts] = useState<string[]>([]);
-  const ppmRows = contracts
-    .flatMap((contract) =>
-      contractServiceRows({ ...contractBlank, ...contract }).map((row) => ({
-        contract: { ...contractBlank, ...contract },
-        ...row,
-      }))
-    )
-    .sort((a, b) => (a.status.days ?? 9999) - (b.status.days ?? 9999));
   const groupedRows = contracts
     .map((contract) => {
       const safeContract = { ...contractBlank, ...contract };
@@ -2562,34 +2554,32 @@ function PpmPanel({
         title="Due This Week"
         icon={CalendarClock}
         tone="blue"
-        headers={["Client", "Property", "Service", "Plan", "Due Date", "Countdown"]}
-        rows={ppmRows
-          .filter((row) => row.status.days !== null && row.status.days >= 0 && row.status.days <= 7)
-          .map((row) => [
-            clientName(row.contract.clientId),
-            propertyName(row.contract.propertyId),
-            row.label,
-            row.contract.plan,
-            row.dueDate || "-",
-            <StatusPill key={`${row.contract.id}-${row.service}-week`} label={row.status.label} tone={row.status.tone} />,
-          ])}
+        customContent={
+          <PpmChecklistTable
+            rows={groupedRows.filter((row) => row.dueSoonCount > 0)}
+            expandedContracts={expandedContracts}
+            onToggle={toggleContract}
+            clientName={clientName}
+            propertyName={propertyName}
+            mode="due"
+          />
+        }
       />
 
       <SummaryTable
         title="Overdue PPM"
         icon={AlertTriangle}
         tone="red"
-        headers={["Client", "Property", "Service", "Plan", "Due Date", "Overdue"]}
-        rows={ppmRows
-          .filter((row) => row.status.days !== null && row.status.days < 0)
-          .map((row) => [
-            clientName(row.contract.clientId),
-            propertyName(row.contract.propertyId),
-            row.label,
-            row.contract.plan,
-            row.dueDate || "-",
-            <StatusPill key={`${row.contract.id}-${row.service}-overdue`} label={row.status.label} tone={row.status.tone} />,
-          ])}
+        customContent={
+          <PpmChecklistTable
+            rows={groupedRows.filter((row) => row.overdueCount > 0)}
+            expandedContracts={expandedContracts}
+            onToggle={toggleContract}
+            clientName={clientName}
+            propertyName={propertyName}
+            mode="overdue"
+          />
+        }
       />
 
       <SummaryTable
@@ -2602,6 +2592,7 @@ function PpmPanel({
             onToggle={toggleContract}
             clientName={clientName}
             propertyName={propertyName}
+            mode="all"
           />
         }
       />
@@ -2615,6 +2606,7 @@ function PpmChecklistTable({
   onToggle,
   clientName,
   propertyName,
+  mode = "all",
 }: {
   rows: {
     contract: ContractRecord;
@@ -2627,6 +2619,7 @@ function PpmChecklistTable({
   onToggle: (contractId: string) => void;
   clientName: (id: string) => string;
   propertyName: (id: string) => string;
+  mode?: "all" | "due" | "overdue";
 }) {
   return (
     <div className="overflow-x-auto">
@@ -2649,8 +2642,28 @@ function PpmChecklistTable({
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {rows.map((row) => {
+          {rows.length === 0 ? (
+            <tr>
+              <td className="px-5 py-8 text-center font-bold text-slate-500" colSpan={7}>
+                No PPM records found.
+              </td>
+            </tr>
+          ) : rows.map((row) => {
             const expanded = expandedContracts.includes(row.contract.id);
+            const visibleServices =
+              mode === "due"
+                ? row.services.filter(
+                    (service) =>
+                      service.status.days !== null &&
+                      service.status.days >= 0 &&
+                      service.status.days <= 7
+                  )
+                : mode === "overdue"
+                  ? row.services.filter(
+                      (service) =>
+                        service.status.days !== null && service.status.days < 0
+                    )
+                  : row.services;
             const statusLabel = row.overdueCount
               ? `${row.overdueCount} overdue`
               : row.dueSoonCount
@@ -2688,7 +2701,15 @@ function PpmChecklistTable({
                     {row.contract.plan}
                   </td>
                   <td className="px-5 py-4 align-top font-semibold text-slate-700">
-                    {row.services.map((service) => service.label).join(", ")}
+                    <div className="flex flex-wrap gap-2">
+                      {visibleServices.map((service) => (
+                        <StatusPill
+                          key={`${row.contract.id}-${service.service}-${mode}`}
+                          label={`${service.label}: ${service.status.label}`}
+                          tone={service.status.tone}
+                        />
+                      ))}
+                    </div>
                   </td>
                   <td className="px-5 py-4 align-top font-semibold text-slate-700">
                     {row.nextService?.dueDate || "-"}
